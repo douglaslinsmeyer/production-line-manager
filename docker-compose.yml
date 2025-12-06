@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with TimescaleDB extension
+  db:
+    image: timescale/timescaledb:latest-pg15
+    container_name: production-line-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: production_lines
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - production-line-network
+
+  # Eclipse Mosquitto MQTT broker
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: production-line-mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    networks:
+      - production-line-network
+
+  # MQTTX Web Client
+  mqttx:
+    image: emqx/mqttx-web:latest
+    container_name: production-line-mqttx
+    ports:
+      - "8090:80"
+    networks:
+      - production-line-network
+
+  # Database migrations
+  migrate:
+    image: migrate/migrate
+    container_name: production-line-migrate
+    volumes:
+      - ./migrations:/migrations
+    command: >
+      -path=/migrations
+      -database postgres://postgres:postgres@db:5432/production_lines?sslmode=disable
+      up
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - production-line-network
+    restart: on-failure
+
+  # Production Line API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: production-line-api
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      LOG_LEVEL: "info"
+      DATABASE_URL: "postgres://postgres:postgres@db:5432/production_lines?sslmode=disable"
+      MQTT_BROKER_URL: "tcp://mqtt:1883"
+      MQTT_CLIENT_ID: "production-line-api"
+      MQTT_QOS: "1"
+      SHUTDOWN_TIMEOUT: "10s"
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - production-line-network
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+    driver: local
+  mosquitto_data:
+    driver: local
+  mosquitto_log:
+    driver: local
+
+networks:
+  production-line-network:
+    driver: bridge

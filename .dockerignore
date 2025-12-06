@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+
+# Environment
+.env
+.env.local
+
+# Build artifacts
+bin/
+server
+*.exe
+
+# Test and coverage
+*.test
+coverage.*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+docs/docs.go
+docs/swagger.json
+docs/swagger.yaml
+
+# Temporary files
+tmp/
+temp/
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
