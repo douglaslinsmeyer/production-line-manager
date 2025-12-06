@@ -49,7 +49,7 @@ services:
     image: migrate/migrate
     container_name: production-line-migrate
     volumes:
-      - ./migrations:/migrations
+      - ./api/migrations:/migrations
     command: >
       -path=/migrations
       -database postgres://postgres:postgres@db:5432/production_lines?sslmode=disable
@@ -64,7 +64,7 @@ services:
   # Production Line API
   api:
     build:
-      context: .
+      context: ./api
       dockerfile: Dockerfile
     container_name: production-line-api
     ports:

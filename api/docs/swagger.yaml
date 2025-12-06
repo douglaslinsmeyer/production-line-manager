@@ -1,0 +1,495 @@
+basePath: /api/v1
+definitions:
+  internal_handler.APIError:
+    properties:
+      code:
+        type: string
+      details: {}
+      message:
+        type: string
+    type: object
+  internal_handler.Meta:
+    properties:
+      total:
+        type: integer
+    type: object
+  internal_handler.Response:
+    properties:
+      data: {}
+      error:
+        $ref: '#/definitions/internal_handler.APIError'
+      meta:
+        $ref: '#/definitions/internal_handler.Meta'
+    type: object
+  ping_production-line-api_internal_domain.CreateLineRequest:
+    properties:
+      code:
+        maxLength: 50
+        type: string
+      description:
+        type: string
+      name:
+        maxLength: 255
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  ping_production-line-api_internal_domain.ProductionLine:
+    properties:
+      code:
+        type: string
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      status:
+        $ref: '#/definitions/ping_production-line-api_internal_domain.Status'
+      updated_at:
+        type: string
+    type: object
+  ping_production-line-api_internal_domain.SetStatusRequest:
+    properties:
+      status:
+        allOf:
+        - $ref: '#/definitions/ping_production-line-api_internal_domain.Status'
+        enum:
+        - "on"
+        - "off"
+        - maintenance
+        - error
+    required:
+    - status
+    type: object
+  ping_production-line-api_internal_domain.Status:
+    enum:
+    - "on"
+    - "off"
+    - maintenance
+    - error
+    type: string
+    x-enum-varnames:
+    - StatusOn
+    - StatusOff
+    - StatusMaintenance
+    - StatusError
+  ping_production-line-api_internal_domain.StatusChange:
+    properties:
+      line_code:
+        type: string
+      line_id:
+        type: string
+      new_status:
+        $ref: '#/definitions/ping_production-line-api_internal_domain.Status'
+      old_status:
+        $ref: '#/definitions/ping_production-line-api_internal_domain.Status'
+      source:
+        type: string
+      source_detail: {}
+      time:
+        type: string
+    type: object
+  ping_production-line-api_internal_domain.UpdateLineRequest:
+    properties:
+      description:
+        type: string
+      name:
+        maxLength: 255
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+  description: API for managing production line operations in a manufacturing facility
+  license:
+    name: Proprietary
+    url: http://www.example.com/license
+  termsOfService: http://swagger.io/terms/
+  title: Production Line API
+  version: "1.0"
+paths:
+  /health:
+    get:
+      description: Returns the health status of the API
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check
+      tags:
+      - health
+  /lines:
+    get:
+      consumes:
+      - application/json
+      description: Get all active production lines
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/ping_production-line-api_internal_domain.ProductionLine'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+      summary: List production lines
+      tags:
+      - lines
+    post:
+      consumes:
+      - application/json
+      description: Create a new production line
+      parameters:
+      - description: Production line details
+        in: body
+        name: line
+        required: true
+        schema:
+          $ref: '#/definitions/ping_production-line-api_internal_domain.CreateLineRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/ping_production-line-api_internal_domain.ProductionLine'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "409":
+          description: Conflict
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+      summary: Create production line
+      tags:
+      - lines
+  /lines/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Soft delete a production line
+      parameters:
+      - description: Production Line ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+      summary: Delete production line
+      tags:
+      - lines
+    get:
+      consumes:
+      - application/json
+      description: Get a production line by ID
+      parameters:
+      - description: Production Line ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/ping_production-line-api_internal_domain.ProductionLine'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+      summary: Get production line
+      tags:
+      - lines
+    put:
+      consumes:
+      - application/json
+      description: Update a production line's details
+      parameters:
+      - description: Production Line ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Updated details
+        in: body
+        name: line
+        required: true
+        schema:
+          $ref: '#/definitions/ping_production-line-api_internal_domain.UpdateLineRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/ping_production-line-api_internal_domain.ProductionLine'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+      summary: Update production line
+      tags:
+      - lines
+  /lines/{id}/status:
+    post:
+      consumes:
+      - application/json
+      description: Set the status of a production line
+      parameters:
+      - description: Production Line ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status details
+        in: body
+        name: status
+        required: true
+        schema:
+          $ref: '#/definitions/ping_production-line-api_internal_domain.SetStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/ping_production-line-api_internal_domain.ProductionLine'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+      summary: Set production line status
+      tags:
+      - lines
+  /lines/{id}/status/history:
+    get:
+      consumes:
+      - application/json
+      description: Get the status change history for a production line
+      parameters:
+      - description: Production Line ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 'Maximum number of records to return (default: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/ping_production-line-api_internal_domain.StatusChange'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            allOf:
+            - $ref: '#/definitions/internal_handler.Response'
+            - properties:
+                error:
+                  $ref: '#/definitions/internal_handler.APIError'
+              type: object
+      summary: Get status history
+      tags:
+      - lines
+schemes:
+- http
+- https
+swagger: "2.0"
