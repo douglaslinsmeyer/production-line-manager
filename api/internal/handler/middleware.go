@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
@@ -41,6 +42,53 @@ func RequestLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
 				zap.Int("bytes", ww.BytesWritten()),
 				zap.Duration("duration", duration),
 				zap.String("remote_addr", r.RemoteAddr))
+		})
+	}
+}
+
+// CORSMiddleware handles Cross-Origin Resource Sharing (CORS) for web UI
+func CORSMiddleware(allowedOriginsStr string) func(next http.Handler) http.Handler {
+	// Parse allowed origins from comma-separated string
+	var allowedOrigins []string
+	if allowedOriginsStr != "" {
+		allowedOrigins = strings.Split(allowedOriginsStr, ",")
+		// Trim whitespace
+		for i := range allowedOrigins {
+			allowedOrigins[i] = strings.TrimSpace(allowedOrigins[i])
+		}
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+
+			// Check if origin is allowed
+			allowed := false
+			if len(allowedOrigins) > 0 {
+				for _, o := range allowedOrigins {
+					if o == "*" || o == origin {
+						allowed = true
+						break
+					}
+				}
+			}
+
+			// Set CORS headers if origin is allowed
+			if allowed {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Max-Age", "3600")
+			}
+
+			// Handle preflight requests
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			next.ServeHTTP(w, r)
 		})
 	}
 }

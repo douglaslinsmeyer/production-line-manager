@@ -10,7 +10,7 @@ import (
 )
 
 // NewRouter creates and configures the HTTP router
-func NewRouter(lineService *service.LineService, logger *zap.Logger) *chi.Mux {
+func NewRouter(lineService *service.LineService, corsOrigins string, logger *zap.Logger) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Middleware stack
@@ -19,6 +19,11 @@ func NewRouter(lineService *service.LineService, logger *zap.Logger) *chi.Mux {
 	r.Use(RequestLogger(logger))
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5))
+
+	// CORS middleware (if configured)
+	if corsOrigins != "" {
+		r.Use(CORSMiddleware(corsOrigins))
+	}
 
 	// Create handlers
 	healthHandler := NewHealthHandler()

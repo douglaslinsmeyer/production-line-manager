@@ -25,6 +25,9 @@ type Config struct {
 
 	// Graceful shutdown timeout
 	ShutdownTimeout time.Duration `envconfig:"SHUTDOWN_TIMEOUT" default:"10s"`
+
+	// CORS configuration
+	CORSAllowedOrigins string `envconfig:"CORS_ALLOWED_ORIGINS" default:""`
 }
 
 // Load loads configuration from environment variables
