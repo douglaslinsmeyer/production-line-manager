@@ -1,201 +1,211 @@
-# Production Line API
+# Production Line Manager
 
-A Go-based API backend for managing production line operations in a manufacturing facility.
+Complete full-stack application for managing production line operations in a manufacturing facility.
+
+## Overview
+
+This monorepo contains:
+- **API** (`api/`): Go backend with PostgreSQL + TimescaleDB and MQTT integration
+- **Web UI** (`web/`): React TypeScript dashboard with real-time monitoring and analytics
 
 ## Features
 
-- **REST API** for production line CRUD operations
-- **Status Management** with audit trail using TimescaleDB
-- **MQTT Integration** for event publishing and command subscription
-- **Structured Logging** with Zap
-- **OpenAPI Documentation** with Swagger UI
-- **Docker Compose** setup for local development
+### Backend (Go API)
+- REST API for production line CRUD operations
+- Status management with audit trail (TimescaleDB)
+- MQTT event publishing and command subscription
+- Swagger/OpenAPI documentation
+- Structured logging with Zap
 
-## Tech Stack
+### Frontend (React Web UI)
+- Real-time dashboard with auto-refresh (TanStack Query)
+- Production line management interface
+- Status change monitoring with live updates
+- Analytics:
+  - Status history charts (Recharts)
+  - Uptime metrics and MTTR
+  - Status distribution visualization
+  - Timeline of all changes
+- Toast notifications for user feedback
+- Responsive mobile-first design
 
-- **Language**: Go 1.22+
-- **HTTP Router**: chi v5
-- **Database**: PostgreSQL 15 + TimescaleDB
-- **MQTT**: Eclipse Paho MQTT client
-- **Logging**: Uber Zap
-- **Documentation**: Swaggo
+## Quick Start
+
+### Start Everything with Docker Compose
+
+```bash
+make docker-up
+```
+
+This starts:
+- PostgreSQL + TimescaleDB (port 5432)
+- MQTT Broker (ports 1883, 9001)
+- Go API (port 8080)
+- React Web UI (port 3000)
+- MQTTX Web Client (port 8090)
+
+Access points:
+- **Web UI**: http://localhost:3000
+- **API**: http://localhost:8080
+- **Swagger UI**: http://localhost:8080/swagger/index.html
+- **MQTTX**: http://localhost:8090
+
+### Development Mode (with hot reload)
+
+```bash
+make docker-up-dev
+```
+
+This provides:
+- Web UI on port 5173 (Vite dev server with HMR)
+- API with debug logging
+- Auto-reload on file changes
+
+## Repository Structure
+
+```
+production-line-manager/
+├── api/                  # Go backend
+│   ├── cmd/              # Application entry point
+│   ├── internal/         # Go packages
+│   ├── migrations/       # Database migrations
+│   ├── Dockerfile        # Production image
+│   └── README.md         # API documentation
+├── web/                  # React frontend
+│   ├── src/              # Source code
+│   │   ├── api/          # API client (axios + types)
+│   │   ├── components/   # UI components
+│   │   ├── pages/        # Route components
+│   │   ├── hooks/        # TanStack Query hooks
+│   │   └── utils/        # Helpers
+│   ├── Dockerfile        # Production image (Nginx)
+│   ├── Dockerfile.dev    # Development image
+│   └── README.md         # Web documentation
+├── docker-compose.yml    # Production services
+├── docker-compose.dev.yml # Development services
+├── Makefile              # Build orchestration
+└── README.md             # This file
+```
+
+## Technology Stack
+
+### Backend
+- Go 1.25
+- Chi v5 (HTTP router)
+- pgx v5 (PostgreSQL driver)
+- TimescaleDB (time-series)
+- Eclipse Paho MQTT
+- Zap (structured logging)
+
+### Frontend
+- React 18 + TypeScript
+- Vite (build tool)
+- TanStack Query (data fetching)
+- React Router v6
+- Tailwind CSS
+- Recharts (analytics)
+- Headless UI
+- react-hot-toast
+
+### Infrastructure
+- PostgreSQL 15 + TimescaleDB
+- Eclipse Mosquitto (MQTT)
+- Docker + Docker Compose
+- GitHub Actions CI/CD
+
+## Development
+
+### Build Both Services
+
+```bash
+make build
+```
+
+### Run Tests
+
+```bash
+make test
+```
+
+### Lint Code
+
+```bash
+make lint
+```
+
+### Clean Build Artifacts
+
+```bash
+make clean
+```
+
+## Docker Commands
+
+```bash
+# Production
+make docker-up          # Start all services
+make docker-down        # Stop all services
+
+# Development (hot reload)
+make docker-up-dev      # Start with volume mounts
+```
 
 ## Status Model
 
-Production lines support the following statuses:
+Production lines support 4 statuses:
 - `on` - Line is running
 - `off` - Line is stopped
 - `maintenance` - Line is under maintenance
 - `error` - Line has encountered an error
 
-## Prerequisites
+## MQTT Integration
 
-- Go 1.22 or higher
-- Docker and Docker Compose
-- Make (optional, for convenience commands)
+### Topics
 
-## Quick Start
+**Published by API (Events)**:
+- `production-lines/events/created`
+- `production-lines/events/updated`
+- `production-lines/events/deleted`
+- `production-lines/events/status`
 
-### Local Development with Docker
+**Subscribed by API (Commands)**:
+- `production-lines/commands/status`
 
-1. Start all services (PostgreSQL, MQTT, API):
-```bash
-make docker-up
-```
+## Documentation
 
-2. Run migrations:
-```bash
-make migrate-up
-```
+- **API Documentation**: See [api/README.md](api/README.md)
+- **Web Documentation**: See [web/README.md](web/README.md)
+- **Development Guide**: See [DEVELOPMENT.md](DEVELOPMENT.md)
+- **API Specs**: http://localhost:8080/swagger/index.html (when running)
 
-3. Access the API:
-- API: http://localhost:8080
-- Swagger UI: http://localhost:8080/swagger/index.html
-- Health Check: http://localhost:8080/health
-
-### Local Development without Docker
-
-1. Start PostgreSQL with TimescaleDB:
-```bash
-docker run -d \
-  -p 5432:5432 \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=production_lines \
-  timescale/timescaledb:latest-pg15
-```
-
-2. Start MQTT broker:
-```bash
-docker run -d \
-  -p 1883:1883 \
-  -v $(pwd)/mosquitto.conf:/mosquitto/config/mosquitto.conf \
-  eclipse-mosquitto:2
-```
-
-3. Set environment variables:
-```bash
-export DATABASE_URL="postgres://postgres:postgres@localhost:5432/production_lines?sslmode=disable"
-export MQTT_BROKER_URL="tcp://localhost:1883"
-```
-
-4. Run migrations:
-```bash
-make migrate-up
-```
-
-5. Generate Swagger docs:
-```bash
-make docs
-```
-
-6. Run the server:
-```bash
-make run
-```
-
-## Available Make Commands
-
-```bash
-make build           # Build the binary
-make run             # Run the server locally
-make test            # Run tests
-make test-coverage   # Run tests with coverage report
-make docs            # Generate Swagger documentation
-make migrate-up      # Run database migrations
-make migrate-down    # Rollback last migration
-make docker-up       # Start all services with Docker Compose
-make docker-down     # Stop all Docker services
-make lint            # Run linters
-make fmt             # Format code
-```
-
-## API Endpoints
-
-### Production Lines
-
-- `GET /api/v1/lines` - List all production lines
-- `GET /api/v1/lines/{id}` - Get a specific production line
-- `POST /api/v1/lines` - Create a new production line
-- `PUT /api/v1/lines/{id}` - Update a production line
-- `DELETE /api/v1/lines/{id}` - Soft delete a production line
-- `POST /api/v1/lines/{id}/status` - Update production line status
-- `GET /api/v1/lines/{id}/status/history` - Get status change history
-
-### Health
-
-- `GET /health` - Health check endpoint
-
-### Documentation
-
-- `GET /swagger/index.html` - Swagger UI
-
-## MQTT Topics
-
-### Published by API (Events)
-
-- `production-lines/events/created` - Line created
-- `production-lines/events/updated` - Line updated
-- `production-lines/events/deleted` - Line deleted
-- `production-lines/events/status` - Status changed
-
-### Subscribed by API (Commands)
-
-- `production-lines/commands/status` - Set line status from shop floor controllers
-
-## Configuration
-
-Configuration is managed via environment variables:
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `PORT` | No | `8080` | HTTP server port |
-| `LOG_LEVEL` | No | `info` | Logging level (debug, info, warn, error) |
-| `DATABASE_URL` | Yes | - | PostgreSQL connection string |
-| `MQTT_BROKER_URL` | Yes | - | MQTT broker address (tcp://host:port) |
-| `MQTT_CLIENT_ID` | No | `production-line-api` | MQTT client identifier |
-| `MQTT_QOS` | No | `1` | MQTT Quality of Service (0, 1, 2) |
-| `SHUTDOWN_TIMEOUT` | No | `10s` | Graceful shutdown timeout |
-
-## Project Structure
+## Architecture
 
 ```
-production-line-api/
-├── cmd/
-│   └── server/          # Application entry point
-├── internal/
-│   ├── app/             # Application lifecycle
-│   ├── config/          # Configuration
-│   ├── database/        # Database connection
-│   ├── domain/          # Domain types and business logic
-│   ├── handler/         # HTTP handlers
-│   ├── logger/          # Logging setup
-│   ├── mqtt/            # MQTT client and pub/sub
-│   ├── repository/      # Data access layer
-│   └── service/         # Business logic layer
-├── migrations/          # Database migrations
-├── scripts/             # Helper scripts
-├── docs/                # Generated Swagger docs
-├── Dockerfile           # Production Docker image
-├── docker-compose.yml   # Local development stack
-└── Makefile             # Build and dev commands
+┌─────────────┐     ┌─────────────┐     ┌──────────────┐
+│   Web UI    │────▶│   Go API    │────▶│  PostgreSQL  │
+│  (React)    │◀────│   (REST)    │◀────│+ TimescaleDB │
+└─────────────┘     └──────┬──────┘     └──────────────┘
+                           │
+                           │ pub/sub
+                           ▼
+                    ┌──────────────┐
+                    │ MQTT Broker  │
+                    │  (Mosquitto) │
+                    └──────┬───────┘
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │ Shop Floor   │
+                    │ Controllers  │
+                    └──────────────┘
 ```
 
-## Testing
+## Contributing
 
-Run all tests:
-```bash
-make test
-```
-
-Run tests with coverage:
-```bash
-make test-coverage
-```
-
-## Deployment
-
-The application is designed to be deployed to a Kubernetes cluster. See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
+1. Create feature branch
+2. Make changes in `api/` or `web/`
+3. Run `make test` and `make lint`
+4. Commit and open PR
 
 ## License
 

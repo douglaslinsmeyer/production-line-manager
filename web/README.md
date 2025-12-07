@@ -1,73 +1,60 @@
-# React + TypeScript + Vite
+# Production Line Manager - Web UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React TypeScript web application for managing production lines with real-time status monitoring and analytics.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Dashboard**: Real-time production line monitoring with auto-refresh
+- **CRUD Operations**: Create, edit, and delete production lines
+- **Status Management**: Change line status with instant feedback
+- **Analytics**:
+  - Status history chart (Recharts area chart)
+  - Status timeline with source tracking
+  - Uptime metrics and MTTR calculations
+  - Status distribution visualization
+- **Real-time Updates**: TanStack Query auto-refetches data every 5 seconds
+- **Toast Notifications**: Elegant user feedback for all operations
+- **Responsive Design**: Mobile-first with Tailwind CSS
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **React 18** with TypeScript
+- **Vite** - Fast build tool and dev server
+- **TanStack Query** - Server state management with automatic caching
+- **React Router v6** - Client-side routing
+- **Axios** - HTTP client
+- **Tailwind CSS** - Utility-first styling
+- **Headless UI** - Accessible UI components
+- **Heroicons** - Icon library
+- **Recharts** - Charting library for analytics
+- **React Hook Form** - Form state management
+- **Zod** - Schema validation
+- **react-hot-toast** - Toast notifications
 
-## Expanding the ESLint configuration
+## Quick Start
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+```bash
+# Install dependencies
+npm install
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+# Start dev server
+npm run dev
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Build for production
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Access at http://localhost:5173
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Environment Variables
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Create `.env`:
+
+```env
+VITE_API_BASE_URL=http://localhost:8080/api/v1
+VITE_MQTT_WS_URL=ws://localhost:9001
 ```
+
+## License
+
+Proprietary - All rights reserved
