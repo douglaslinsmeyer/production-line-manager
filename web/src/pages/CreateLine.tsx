@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useCreateLine } from '@/hooks/useLines';
 import type { CreateLineRequest } from '@/api/types';
@@ -10,22 +10,14 @@ import LineForm from '@/components/lines/LineForm';
 export default function CreateLine() {
   const navigate = useNavigate();
   const createLine = useCreateLine();
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleSubmit = async (data: CreateLineRequest) => {
-    setError(null);
-    setSuccessMessage(null);
-
     try {
       await createLine.mutateAsync(data);
-      setSuccessMessage(`Production line "${data.name}" created successfully!`);
-      // Navigate to dashboard after a brief delay to show success message
-      setTimeout(() => {
-        navigate('/', { replace: true });
-      }, 1500);
+      toast.success(`Production line "${data.name}" created successfully!`);
+      navigate('/', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create production line');
+      toast.error(err instanceof Error ? err.message : 'Failed to create production line');
     }
   };
 
@@ -48,20 +40,6 @@ export default function CreateLine() {
           <p className="mt-1 text-gray-600">Add a new production line to the system</p>
         </div>
       </div>
-
-      {/* Success message */}
-      {successMessage && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <p className="text-green-800">{successMessage}</p>
-        </div>
-      )}
-
-      {/* Error message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-600">{error}</p>
-        </div>
-      )}
 
       {/* Form card */}
       <Card>

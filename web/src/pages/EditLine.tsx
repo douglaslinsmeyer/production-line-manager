@@ -1,5 +1,5 @@
-import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useLine, useUpdateLine } from '@/hooks/useLines';
 import type { UpdateLineRequest } from '@/api/types';
@@ -13,22 +13,14 @@ export default function EditLine() {
   const navigate = useNavigate();
   const { data: line, isLoading, error: fetchError } = useLine(id!);
   const updateLine = useUpdateLine(id!);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleSubmit = async (data: UpdateLineRequest) => {
-    setError(null);
-    setSuccessMessage(null);
-
     try {
       await updateLine.mutateAsync(data);
-      setSuccessMessage('Production line updated successfully!');
-      // Navigate back to detail page after a brief delay
-      setTimeout(() => {
-        navigate(`/lines/${id}`, { replace: true });
-      }, 1500);
+      toast.success('Production line updated successfully!');
+      navigate(`/lines/${id}`, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update production line');
+      toast.error(err instanceof Error ? err.message : 'Failed to update production line');
     }
   };
 
@@ -90,20 +82,6 @@ export default function EditLine() {
           <p className="mt-1 text-gray-600">{line.name} (Code: {line.code})</p>
         </div>
       </div>
-
-      {/* Success message */}
-      {successMessage && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-          <p className="text-green-800">{successMessage}</p>
-        </div>
-      )}
-
-      {/* Error message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-600">{error}</p>
-        </div>
-      )}
 
       {/* Form card */}
       <Card>

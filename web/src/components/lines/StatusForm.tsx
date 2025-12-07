@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import toast from 'react-hot-toast';
 import { useSetStatus } from '@/hooks/useLines';
 import type { Status } from '@/api/types';
 import { STATUS_OPTIONS } from '@/utils/constants';
@@ -13,23 +14,23 @@ interface StatusFormProps {
 
 export default function StatusForm({ lineId, currentStatus, onSuccess, onCancel }: StatusFormProps) {
   const [selectedStatus, setSelectedStatus] = useState<Status>(currentStatus);
-  const [error, setError] = useState<string | null>(null);
   const setStatus = useSetStatus(lineId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
 
     if (selectedStatus === currentStatus) {
+      toast('Status is already set to ' + selectedStatus, { icon: 'ℹ️' });
       onCancel?.();
       return;
     }
 
     try {
       await setStatus.mutateAsync(selectedStatus);
+      toast.success(`Status changed to ${selectedStatus}`);
       onSuccess?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update status');
+      toast.error(err instanceof Error ? err.message : 'Failed to update status');
     }
   };
 
@@ -56,12 +57,6 @@ export default function StatusForm({ lineId, currentStatus, onSuccess, onCancel 
           ))}
         </select>
       </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <p className="text-sm text-red-600">{error}</p>
-        </div>
-      )}
 
       <div className="flex items-center justify-end space-x-2">
         {onCancel && (
