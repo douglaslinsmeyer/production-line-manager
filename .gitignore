@@ -40,3 +40,9 @@ docs/swagger.yaml
 # Temporary files
 tmp/
 temp/
+
+# Node.js (web application)
+node_modules/
+dist/
+*.local
+package-lock.json
