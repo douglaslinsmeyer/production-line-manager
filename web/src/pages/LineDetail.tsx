@@ -1,20 +1,26 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { PencilIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
-import { useLine } from '@/hooks/useLines';
+import { useLine, useStatusHistory } from '@/hooks/useLines';
 import Loading from '@/components/common/Loading';
 import Card from '@/components/common/Card';
 import StatusBadge from '@/components/common/StatusBadge';
 import Button from '@/components/common/Button';
 import StatusForm from '@/components/lines/StatusForm';
 import DeleteConfirmModal from '@/components/lines/DeleteConfirmModal';
+import StatusHistoryChart from '@/components/analytics/StatusHistoryChart';
+import StatusTimeline from '@/components/analytics/StatusTimeline';
+import UptimeMetrics from '@/components/analytics/UptimeMetrics';
+import TimeRangeSelector, { type TimeRange } from '@/components/analytics/TimeRangeSelector';
 import { formatDate, formatRelativeTime } from '@/utils/formatters';
 
 export default function LineDetail() {
   const { id } = useParams<{ id: string }>();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [timeRange, setTimeRange] = useState<TimeRange>('7d');
 
   const { data: line, isLoading, error } = useLine(id!);
+  const { data: history = [], isLoading: isLoadingHistory } = useStatusHistory(id!, 100);
 
   if (isLoading) {
     return <Loading message="Loading production line..." />;
@@ -131,15 +137,35 @@ export default function LineDetail() {
         </Card>
       </div>
 
-      {/* Analytics placeholder - will be implemented in Phase 6 */}
-      <Card title="Analytics">
-        <div className="bg-gray-50 rounded-lg p-8 text-center">
-          <p className="text-gray-600">
-            Production analytics and metrics will be displayed here
-          </p>
-          <p className="text-gray-500 text-sm mt-2">Coming in Phase 6</p>
+      {/* Analytics Section */}
+      <div className="space-y-6">
+        {/* Time Range Selector */}
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-gray-900">Analytics</h2>
+          <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
         </div>
-      </Card>
+
+        {isLoadingHistory ? (
+          <Loading message="Loading analytics..." />
+        ) : (
+          <>
+            {/* Uptime Metrics */}
+            <Card title="Performance Metrics">
+              <UptimeMetrics history={history} />
+            </Card>
+
+            {/* Status History Chart */}
+            <Card title="Status History">
+              <StatusHistoryChart history={history} />
+            </Card>
+
+            {/* Status Timeline */}
+            <Card title="Status Change Timeline">
+              <StatusTimeline history={history} />
+            </Card>
+          </>
+        )}
+      </div>
 
       {/* Delete confirmation modal */}
       <DeleteConfirmModal
