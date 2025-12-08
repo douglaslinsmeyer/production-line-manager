@@ -3,7 +3,6 @@ import toast from 'react-hot-toast';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useCreateLine } from '@/hooks/useLines';
 import { linesApi } from '@/api/lines';
-import type { CreateLineRequest } from '@/api/types';
 import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
 import LineForm from '@/components/lines/LineForm';

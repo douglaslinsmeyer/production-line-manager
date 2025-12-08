@@ -39,5 +39,5 @@ type ProductionLineLabel struct {
 
 // AssignLabelsRequest represents the request to assign labels to a line
 type AssignLabelsRequest struct {
-	LabelIDs []uuid.UUID `json:"label_ids" validate:"required,min=1,dive,uuid"`
+	LabelIDs []uuid.UUID `json:"label_ids" validate:"dive,uuid"`
 }

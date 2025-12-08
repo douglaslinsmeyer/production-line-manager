@@ -1,9 +1,29 @@
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import Button from '@/components/common/Button';
 import LineList from '@/components/lines/LineList';
+import LabelFilter from '@/components/labels/LabelFilter';
+import { useLines, useLabels } from '@/hooks/useLines';
+import type { Label } from '@/api/types';
 
 export default function Dashboard() {
+  const [selectedLabels, setSelectedLabels] = useState<Label[]>([]);
+  const { data: allLines, isLoading, error } = useLines();
+  const { data: availableLabels } = useLabels();
+
+  // Filter lines by selected labels
+  const filteredLines = useMemo(() => {
+    if (!allLines) return [];
+    if (selectedLabels.length === 0) return allLines;
+
+    return allLines.filter((line) =>
+      line.labels?.some((lineLabel) =>
+        selectedLabels.some((selectedLabel) => selectedLabel.id === lineLabel.id)
+      )
+    );
+  }, [allLines, selectedLabels]);
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -22,8 +42,19 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {/* Label filter */}
+      {availableLabels && availableLabels.length > 0 && (
+        <div className="max-w-xs">
+          <LabelFilter
+            selectedLabels={selectedLabels}
+            onLabelsChange={setSelectedLabels}
+            availableLabels={availableLabels}
+          />
+        </div>
+      )}
+
       {/* Lines list */}
-      <LineList />
+      <LineList lines={filteredLines} isLoading={isLoading} error={error} />
     </div>
   );
 }

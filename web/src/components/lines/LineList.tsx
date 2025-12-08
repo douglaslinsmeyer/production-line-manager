@@ -1,10 +1,14 @@
-import { useLines } from '@/hooks/useLines';
+import type { ProductionLine } from '@/api/types';
 import Loading from '@/components/common/Loading';
 import LineCard from './LineCard';
 
-export default function LineList() {
-  const { data: lines, isLoading, error } = useLines();
+interface LineListProps {
+  lines: ProductionLine[];
+  isLoading?: boolean;
+  error?: Error | null;
+}
 
+export default function LineList({ lines, isLoading, error }: LineListProps) {
   if (isLoading) {
     return <Loading message="Loading production lines..." />;
   }
@@ -32,7 +36,7 @@ export default function LineList() {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="flex flex-col gap-4">
       {lines.map((line) => (
         <LineCard key={line.id} line={line} />
       ))}

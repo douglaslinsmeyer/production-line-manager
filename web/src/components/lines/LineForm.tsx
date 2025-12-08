@@ -29,11 +29,13 @@ const editLineSchema = z.object({
   labels: z.array(z.custom<Label>()).optional(),
 });
 
-type LineFormData = z.infer<typeof createLineSchema>;
+type CreateLineFormData = z.infer<typeof createLineSchema>;
+type EditLineFormData = z.infer<typeof editLineSchema>;
+type LineFormData = CreateLineFormData | EditLineFormData;
 
 interface LineFormProps {
   initialData?: Partial<LineFormData>;
-  onSubmit: (data: LineFormData) => Promise<void>;
+  onSubmit: (data: any) => Promise<void>;
   onCancel: () => void;
   isSubmitting?: boolean;
   mode?: 'create' | 'edit';
@@ -51,14 +53,14 @@ export default function LineForm({
     handleSubmit,
     control,
     formState: { errors },
-  } = useForm<LineFormData>({
-    resolver: zodResolver(mode === 'create' ? createLineSchema : editLineSchema),
+  } = useForm<any>({
+    resolver: zodResolver(mode === 'create' ? createLineSchema : editLineSchema) as any,
     defaultValues: initialData,
   });
 
   const { data: availableLabels = [] } = useLabels();
 
-  const handleFormSubmit = async (data: LineFormData) => {
+  const handleFormSubmit = async (data: any) => {
     try {
       await onSubmit(data);
     } catch (error) {
@@ -87,7 +89,7 @@ export default function LineForm({
             placeholder="e.g., LINE-001"
           />
           {errors.code && (
-            <p className="mt-1 text-sm text-red-600">{errors.code.message}</p>
+            <p className="mt-1 text-sm text-red-600">{String(errors.code.message)}</p>
           )}
         </div>
       )}
@@ -109,7 +111,7 @@ export default function LineForm({
           placeholder="e.g., Assembly Line A"
         />
         {errors.name && (
-          <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+          <p className="mt-1 text-sm text-red-600">{String(errors.name.message)}</p>
         )}
       </div>
 
@@ -129,7 +131,7 @@ export default function LineForm({
           placeholder="Optional description of the production line..."
         />
         {errors.description && (
-          <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
+          <p className="mt-1 text-sm text-red-600">{String(errors.description.message)}</p>
         )}
       </div>
 
