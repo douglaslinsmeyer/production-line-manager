@@ -122,6 +122,20 @@ export default function LineDetail() {
               </div>
             )}
 
+            {line.schedule_id && (
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Schedule</dt>
+                <dd className="mt-1">
+                  <Link
+                    to={`/schedules/${line.schedule_id}`}
+                    className="text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    {line.schedule?.name || 'View Schedule'}
+                  </Link>
+                </dd>
+              </div>
+            )}
+
             <div>
               <dt className="text-sm font-medium text-gray-500">Created</dt>
               <dd className="mt-1 text-gray-900">

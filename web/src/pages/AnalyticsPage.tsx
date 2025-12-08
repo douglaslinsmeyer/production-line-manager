@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
@@ -7,7 +7,10 @@ import LabelFilter from '@/components/labels/LabelFilter';
 import TimeRangeSelector from '@/components/analytics/TimeRangeSelector';
 import SystemMetrics from '@/components/analytics/SystemMetrics';
 import LabelComparisonChart from '@/components/analytics/LabelComparisonChart';
+import ComplianceMetrics from '@/components/analytics/ComplianceMetrics';
+import ComplianceChart from '@/components/analytics/ComplianceChart';
 import { useAggregateMetrics, useLabelMetrics, useLineMetrics } from '@/hooks/useAnalytics';
+import { useAggregateCompliance } from '@/hooks/useCompliance';
 import { useLabels } from '@/hooks/useLines';
 import { formatDuration } from '@/utils/formatters';
 import type { AnalyticsFilters, TimeRange, Status, Label } from '@/api/types';
@@ -29,6 +32,42 @@ export default function AnalyticsPage() {
   const { data: aggregateMetrics, isLoading: aggregateLoading, error: aggregateError } = useAggregateMetrics(filters);
   const { data: labelMetrics = [], isLoading: labelMetricsLoading } = useLabelMetrics(filters);
   const { data: lineMetrics = [], isLoading: lineMetricsLoading } = useLineMetrics(filters);
+
+  // Calculate date range for compliance based on timeframe
+  const { startDate, endDate } = useMemo(() => {
+    const end = new Date();
+    const start = new Date();
+
+    switch (filters.timeframe) {
+      case '24h':
+        start.setDate(start.getDate() - 1);
+        break;
+      case '7d':
+        start.setDate(start.getDate() - 7);
+        break;
+      case '30d':
+        start.setDate(start.getDate() - 30);
+        break;
+      default:
+        start.setDate(start.getDate() - 7);
+    }
+
+    return {
+      startDate: start.toISOString().split('T')[0],
+      endDate: end.toISOString().split('T')[0],
+    };
+  }, [filters.timeframe]);
+
+  // Fetch compliance data
+  const {
+    data: complianceMetrics,
+    isLoading: complianceLoading
+  } = useAggregateCompliance(
+    startDate,
+    endDate,
+    undefined, // Don't filter by line IDs for now
+    filters.label_ids.length > 0 ? filters.label_ids : undefined
+  );
 
   const selectedLabels = availableLabels.filter((label) => filters.label_ids.includes(label.id));
 
@@ -53,7 +92,7 @@ export default function AnalyticsPage() {
     });
   };
 
-  const isLoading = aggregateLoading || labelMetricsLoading || lineMetricsLoading || labelsLoading;
+  const isLoading = aggregateLoading || labelMetricsLoading || lineMetricsLoading || labelsLoading || complianceLoading;
 
   if (isLoading) {
     return <Loading message="Loading analytics..." />;
@@ -127,6 +166,21 @@ export default function AnalyticsPage() {
         <h2 className="text-xl font-semibold mb-4">System Overview</h2>
         <SystemMetrics metrics={aggregateMetrics} />
       </Card>
+
+      {/* Schedule Compliance */}
+      {complianceMetrics && (
+        <Card>
+          <h2 className="text-xl font-semibold mb-4">Schedule Compliance</h2>
+          <ComplianceMetrics metrics={complianceMetrics} />
+
+          {complianceMetrics.line_metrics && complianceMetrics.line_metrics.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-lg font-medium mb-4">Scheduled vs Actual Production Hours</h3>
+              <ComplianceChart lineMetrics={complianceMetrics.line_metrics} />
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Status Distribution & MTTR */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

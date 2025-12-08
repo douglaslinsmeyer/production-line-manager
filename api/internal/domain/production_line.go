@@ -33,15 +33,17 @@ func (s Status) String() string {
 
 // ProductionLine represents a production line in the facility
 type ProductionLine struct {
-	ID          uuid.UUID  `json:"id" db:"id"`
-	Code        string     `json:"code" db:"code"`
-	Name        string     `json:"name" db:"name"`
-	Description *string    `json:"description,omitempty" db:"description"`
-	Status      Status     `json:"status" db:"status"`
-	Labels      []Label    `json:"labels,omitempty" db:"-"` // Loaded via JOIN, not from production_lines table
-	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
-	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
+	ID          uuid.UUID         `json:"id" db:"id"`
+	Code        string            `json:"code" db:"code"`
+	Name        string            `json:"name" db:"name"`
+	Description *string           `json:"description,omitempty" db:"description"`
+	Status      Status            `json:"status" db:"status"`
+	ScheduleID  *uuid.UUID        `json:"schedule_id,omitempty" db:"schedule_id"`
+	Labels      []Label           `json:"labels,omitempty" db:"-"`           // Loaded via JOIN, not from production_lines table
+	Schedule    *ScheduleSummary  `json:"schedule,omitempty" db:"-"`         // Loaded via JOIN when needed
+	CreatedAt   time.Time         `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at" db:"updated_at"`
+	DeletedAt   *time.Time        `json:"deleted_at,omitempty" db:"deleted_at"`
 }
 
 // CreateLineRequest represents the request to create a new production line

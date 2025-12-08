@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
-import { formatDate, formatRelativeTime } from '@/utils/formatters';
+import { formatDate, formatRelativeTime, formatDuration } from '@/utils/formatters';
 import StatusBadge from '@/components/common/StatusBadge';
 import type { StatusChange } from '@/api/types';
 
@@ -32,27 +32,44 @@ export default function StatusTimeline({ history }: StatusTimelineProps) {
   return (
     <div className="flow-root">
       <ul className="-mb-8">
-        {history.map((change, index) => (
+        {history.map((change, index) => {
+          // Calculate duration to next event (if not the last item)
+          const duration = index < history.length - 1
+            ? Math.abs(new Date(history[index + 1].time).getTime() - new Date(change.time).getTime())
+            : null;
+
+          return (
           <li key={`${change.time}-${index}`}>
-            <div className="relative pb-8">
-              {/* Connector line */}
-              {index < history.length - 1 && (
-                <span
-                  className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200"
-                  aria-hidden="true"
-                />
-              )}
-
-              <div className="relative flex space-x-3">
-                {/* Status indicator dot */}
-                <div>
-                  <span className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center ring-8 ring-white">
-                    <div className="h-2 w-2 rounded-full bg-blue-500" />
+            <div className="relative pb-8 flex">
+              {/* Duration column (left side) */}
+              <div className="w-20 flex-shrink-0 text-right pr-4">
+                {duration && (
+                  <span className="text-xs text-gray-500 font-medium">
+                    {formatDuration(duration)}
                   </span>
-                </div>
+                )}
+              </div>
 
-                {/* Content */}
-                <div className="flex min-w-0 flex-1 justify-between space-x-4">
+              {/* Timeline column (middle and right) */}
+              <div className="relative flex-1">
+                {/* Connector line */}
+                {index < history.length - 1 && (
+                  <span
+                    className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200"
+                    aria-hidden="true"
+                  />
+                )}
+
+                <div className="relative flex space-x-3">
+                  {/* Status indicator dot */}
+                  <div>
+                    <span className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center ring-8 ring-white">
+                      <div className="h-2 w-2 rounded-full bg-blue-500" />
+                    </span>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex min-w-0 flex-1 justify-between space-x-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       {change.old_status && (
@@ -108,9 +125,11 @@ export default function StatusTimeline({ history }: StatusTimelineProps) {
                   </div>
                 </div>
               </div>
+              </div>
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );

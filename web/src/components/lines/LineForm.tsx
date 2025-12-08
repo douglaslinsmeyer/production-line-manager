@@ -4,6 +4,7 @@ import { z } from 'zod';
 import Button from '@/components/common/Button';
 import LabelInput from '@/components/labels/LabelInput';
 import { useLabels } from '@/hooks/useLines';
+import { useSchedules } from '@/hooks/useSchedules';
 import type { Label } from '@/api/types';
 
 // Validation schemas
@@ -18,6 +19,7 @@ const createLineSchema = z.object({
     .max(255, 'Name must be 255 characters or less'),
   description: z.string().optional(),
   labels: z.array(z.custom<Label>()).optional(),
+  schedule_id: z.string().optional().nullable(),
 });
 
 const editLineSchema = z.object({
@@ -27,6 +29,7 @@ const editLineSchema = z.object({
     .max(255, 'Name must be 255 characters or less'),
   description: z.string().optional(),
   labels: z.array(z.custom<Label>()).optional(),
+  schedule_id: z.string().optional().nullable(),
 });
 
 type CreateLineFormData = z.infer<typeof createLineSchema>;
@@ -59,6 +62,7 @@ export default function LineForm({
   });
 
   const { data: availableLabels = [] } = useLabels();
+  const { data: availableSchedules = [] } = useSchedules();
 
   const handleFormSubmit = async (data: any) => {
     try {
@@ -133,6 +137,31 @@ export default function LineForm({
         {errors.description && (
           <p className="mt-1 text-sm text-red-600">{String(errors.description.message)}</p>
         )}
+      </div>
+
+      {/* Schedule field */}
+      <div>
+        <label htmlFor="schedule_id" className="block text-sm font-medium text-gray-700 mb-2">
+          Schedule
+        </label>
+        <select
+          {...register('schedule_id')}
+          id="schedule_id"
+          className="
+            w-full px-4 py-2 rounded-lg border border-gray-300
+            focus:outline-none focus:ring-2 focus:ring-blue-500
+          "
+        >
+          <option value="">No schedule assigned</option>
+          {availableSchedules.map((schedule) => (
+            <option key={schedule.id} value={schedule.id}>
+              {schedule.name}
+            </option>
+          ))}
+        </select>
+        <p className="mt-1 text-sm text-gray-500">
+          Assign a schedule to track planned uptime vs actual
+        </p>
       </div>
 
       {/* Labels field */}

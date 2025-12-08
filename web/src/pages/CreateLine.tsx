@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useCreateLine } from '@/hooks/useLines';
 import { linesApi } from '@/api/lines';
+import { useAssignScheduleToLine } from '@/hooks/useSchedules';
 import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
 import LineForm from '@/components/lines/LineForm';
@@ -10,6 +11,7 @@ import LineForm from '@/components/lines/LineForm';
 export default function CreateLine() {
   const navigate = useNavigate();
   const createLine = useCreateLine();
+  const assignSchedule = useAssignScheduleToLine();
 
   const handleSubmit = async (data: any) => {
     try {
@@ -26,6 +28,14 @@ export default function CreateLine() {
           createdLine.id,
           data.labels.map((l: any) => l.id)
         );
+      }
+
+      // Step 3: Assign schedule if selected
+      if (data.schedule_id) {
+        await assignSchedule.mutateAsync({
+          lineId: createdLine.id,
+          scheduleId: data.schedule_id,
+        });
       }
 
       toast.success(`Production line "${data.name}" created successfully!`);

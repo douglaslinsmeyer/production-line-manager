@@ -28,7 +28,7 @@ func (r *LineRepository) Create(ctx context.Context, req domain.CreateLineReques
 	query := `
 		INSERT INTO production_lines (code, name, description)
 		VALUES ($1, $2, $3)
-		RETURNING id, code, name, description, status, created_at, updated_at
+		RETURNING id, code, name, description, status, schedule_id, created_at, updated_at
 	`
 
 	var line domain.ProductionLine
@@ -38,6 +38,7 @@ func (r *LineRepository) Create(ctx context.Context, req domain.CreateLineReques
 		&line.Name,
 		&line.Description,
 		&line.Status,
+		&line.ScheduleID,
 		&line.CreatedAt,
 		&line.UpdatedAt,
 	)
@@ -57,21 +58,31 @@ func (r *LineRepository) Create(ctx context.Context, req domain.CreateLineReques
 // GetByID retrieves a production line by its ID
 func (r *LineRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.ProductionLine, error) {
 	query := `
-		SELECT id, code, name, description, status, created_at, updated_at, deleted_at
-		FROM production_lines
-		WHERE id = $1 AND deleted_at IS NULL
+		SELECT
+			pl.id, pl.code, pl.name, pl.description, pl.status, pl.schedule_id,
+			pl.created_at, pl.updated_at, pl.deleted_at,
+			s.name as schedule_name, s.description as schedule_description,
+			s.timezone as schedule_timezone
+		FROM production_lines pl
+		LEFT JOIN schedules s ON pl.schedule_id = s.id AND s.deleted_at IS NULL
+		WHERE pl.id = $1 AND pl.deleted_at IS NULL
 	`
 
 	var line domain.ProductionLine
+	var scheduleName, scheduleDescription, scheduleTimezone *string
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&line.ID,
 		&line.Code,
 		&line.Name,
 		&line.Description,
 		&line.Status,
+		&line.ScheduleID,
 		&line.CreatedAt,
 		&line.UpdatedAt,
 		&line.DeletedAt,
+		&scheduleName,
+		&scheduleDescription,
+		&scheduleTimezone,
 	)
 
 	if err != nil {
@@ -79,6 +90,16 @@ func (r *LineRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Pro
 			return nil, domain.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to get production line by id: %w", err)
+	}
+
+	// Populate schedule summary if schedule_id exists
+	if line.ScheduleID != nil && scheduleName != nil {
+		line.Schedule = &domain.ScheduleSummary{
+			ID:          *line.ScheduleID,
+			Name:        *scheduleName,
+			Description: scheduleDescription,
+			Timezone:    *scheduleTimezone,
+		}
 	}
 
 	// Load labels for this line
@@ -94,7 +115,7 @@ func (r *LineRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Pro
 // GetByCode retrieves a production line by its code
 func (r *LineRepository) GetByCode(ctx context.Context, code string) (*domain.ProductionLine, error) {
 	query := `
-		SELECT id, code, name, description, status, created_at, updated_at, deleted_at
+		SELECT id, code, name, description, status, schedule_id, created_at, updated_at, deleted_at
 		FROM production_lines
 		WHERE code = $1 AND deleted_at IS NULL
 	`
@@ -106,6 +127,7 @@ func (r *LineRepository) GetByCode(ctx context.Context, code string) (*domain.Pr
 		&line.Name,
 		&line.Description,
 		&line.Status,
+		&line.ScheduleID,
 		&line.CreatedAt,
 		&line.UpdatedAt,
 		&line.DeletedAt,
@@ -124,7 +146,7 @@ func (r *LineRepository) GetByCode(ctx context.Context, code string) (*domain.Pr
 // List retrieves all active production lines
 func (r *LineRepository) List(ctx context.Context) ([]domain.ProductionLine, error) {
 	query := `
-		SELECT id, code, name, description, status, created_at, updated_at
+		SELECT id, code, name, description, status, schedule_id, created_at, updated_at
 		FROM production_lines
 		WHERE deleted_at IS NULL
 		ORDER BY code ASC
@@ -145,6 +167,7 @@ func (r *LineRepository) List(ctx context.Context) ([]domain.ProductionLine, err
 			&line.Name,
 			&line.Description,
 			&line.Status,
+			&line.ScheduleID,
 			&line.CreatedAt,
 			&line.UpdatedAt,
 		)
@@ -180,7 +203,7 @@ func (r *LineRepository) Update(ctx context.Context, id uuid.UUID, req domain.Up
 		    description = COALESCE($3, description),
 		    updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL
-		RETURNING id, code, name, description, status, created_at, updated_at
+		RETURNING id, code, name, description, status, schedule_id, created_at, updated_at
 	`
 
 	var line domain.ProductionLine
@@ -190,6 +213,7 @@ func (r *LineRepository) Update(ctx context.Context, id uuid.UUID, req domain.Up
 		&line.Name,
 		&line.Description,
 		&line.Status,
+		&line.ScheduleID,
 		&line.CreatedAt,
 		&line.UpdatedAt,
 	)
@@ -211,7 +235,7 @@ func (r *LineRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status 
 		SET status = $2,
 		    updated_at = now()
 		WHERE id = $1 AND deleted_at IS NULL
-		RETURNING id, code, name, description, status, created_at, updated_at
+		RETURNING id, code, name, description, status, schedule_id, created_at, updated_at
 	`
 
 	var line domain.ProductionLine
@@ -221,6 +245,7 @@ func (r *LineRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status 
 		&line.Name,
 		&line.Description,
 		&line.Status,
+		&line.ScheduleID,
 		&line.CreatedAt,
 		&line.UpdatedAt,
 	)
@@ -358,7 +383,7 @@ func (r *LineRepository) getLabelsForLine(ctx context.Context, lineID uuid.UUID)
 // ListByLabels retrieves production lines that have ANY of the specified labels (OR logic)
 func (r *LineRepository) ListByLabels(ctx context.Context, labelIDs []uuid.UUID) ([]domain.ProductionLine, error) {
 	query := `
-		SELECT DISTINCT pl.id, pl.code, pl.name, pl.description, pl.status,
+		SELECT DISTINCT pl.id, pl.code, pl.name, pl.description, pl.status, pl.schedule_id,
 		       pl.created_at, pl.updated_at
 		FROM production_lines pl
 		INNER JOIN production_line_labels pll ON pl.id = pll.line_id
@@ -382,6 +407,7 @@ func (r *LineRepository) ListByLabels(ctx context.Context, labelIDs []uuid.UUID)
 			&line.Name,
 			&line.Description,
 			&line.Status,
+			&line.ScheduleID,
 			&line.CreatedAt,
 			&line.UpdatedAt,
 		)

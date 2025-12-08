@@ -17,7 +17,9 @@ export interface ProductionLine {
   name: string;
   description?: string;
   status: Status;
+  schedule_id?: string;
   labels?: Label[];
+  schedule?: ScheduleSummary;
   created_at: string;
   updated_at: string;
 }
@@ -135,4 +137,245 @@ export interface APIResponse<T> {
   meta?: {
     total: number;
   };
+}
+
+// Schedule types
+export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sunday, 6=Saturday
+
+export type ScheduleSource = 'base' | 'holiday' | 'schedule_exception' | 'line_exception';
+
+export interface ScheduleBreak {
+  id: string;
+  schedule_day_id: string;
+  name: string;
+  break_start: string; // HH:MM:SS format
+  break_end: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduleDay {
+  id: string;
+  schedule_id: string;
+  day_of_week: DayOfWeek;
+  is_working_day: boolean;
+  shift_start?: string; // HH:MM:SS format
+  shift_end?: string;
+  breaks: ScheduleBreak[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Schedule {
+  id: string;
+  name: string;
+  description?: string;
+  timezone: string;
+  days: ScheduleDay[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduleSummary {
+  id: string;
+  name: string;
+  description?: string;
+  timezone: string;
+  line_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduleHoliday {
+  id: string;
+  schedule_id: string;
+  holiday_date: string; // YYYY-MM-DD
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduleExceptionDay {
+  id: string;
+  exception_id: string;
+  day_of_week: DayOfWeek;
+  is_working_day: boolean;
+  shift_start?: string;
+  shift_end?: string;
+  breaks: ScheduleBreak[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduleException {
+  id: string;
+  schedule_id: string;
+  name: string;
+  start_date: string; // YYYY-MM-DD
+  end_date: string;
+  days: ScheduleExceptionDay[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LineScheduleException {
+  id: string;
+  schedule_id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  line_ids: string[];
+  days: ScheduleExceptionDay[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EffectiveBreak {
+  name: string;
+  break_start: string;
+  break_end: string;
+}
+
+export interface EffectiveSchedule {
+  line_id: string;
+  date: string; // YYYY-MM-DD
+  source: ScheduleSource;
+  source_id?: string;
+  source_name?: string;
+  is_working_day: boolean;
+  shift_start?: string;
+  shift_end?: string;
+  breaks: EffectiveBreak[];
+}
+
+// Schedule request types
+export interface CreateScheduleDayInput {
+  day_of_week: DayOfWeek;
+  is_working_day: boolean;
+  shift_start?: string;
+  shift_end?: string;
+  breaks?: CreateBreakInput[];
+}
+
+export interface CreateBreakInput {
+  name: string;
+  break_start: string;
+  break_end: string;
+}
+
+export interface CreateScheduleRequest {
+  name: string;
+  description?: string;
+  timezone?: string;
+  days: CreateScheduleDayInput[];
+}
+
+export interface UpdateScheduleRequest {
+  name?: string;
+  description?: string;
+  timezone?: string;
+}
+
+export interface UpdateScheduleDayRequest {
+  is_working_day?: boolean;
+  shift_start?: string;
+  shift_end?: string;
+}
+
+export interface SetScheduleBreaksRequest {
+  breaks: CreateBreakInput[];
+}
+
+export interface CreateHolidayRequest {
+  holiday_date: string;
+  name: string;
+}
+
+export interface UpdateHolidayRequest {
+  holiday_date?: string;
+  name?: string;
+}
+
+export interface CreateScheduleExceptionRequest {
+  name: string;
+  start_date: string;
+  end_date: string;
+  days: CreateScheduleDayInput[];
+}
+
+export interface UpdateScheduleExceptionRequest {
+  name?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface CreateLineScheduleExceptionRequest {
+  name: string;
+  start_date: string;
+  end_date: string;
+  line_ids: string[];
+  days: CreateScheduleDayInput[];
+}
+
+export interface UpdateLineScheduleExceptionRequest {
+  name?: string;
+  start_date?: string;
+  end_date?: string;
+  line_ids?: string[];
+}
+
+export interface AssignScheduleToLineRequest {
+  schedule_id: string | null;
+}
+
+// ========== Compliance Types ==========
+
+export interface ComplianceQuery {
+  start_date: string;
+  end_date: string;
+  line_ids?: string[];
+  label_ids?: string[];
+}
+
+export interface LineComplianceMetrics {
+  line_id: string;
+  line_code: string;
+  line_name: string;
+  schedule_id?: string;
+  schedule_name?: string;
+  scheduled_uptime_hours: number;
+  actual_uptime_hours: number;
+  compliance_percentage: number;
+  unplanned_downtime_hours: number;
+  overtime_hours: number;
+  scheduled_days: number;
+  working_days: number;
+}
+
+export interface AggregateComplianceMetrics {
+  total_lines: number;
+  lines_with_schedule: number;
+  total_scheduled_hours: number;
+  total_actual_hours: number;
+  average_compliance_percentage: number;
+  total_unplanned_downtime_hours: number;
+  total_overtime_hours: number;
+  date_range: DateRange;
+  line_metrics?: LineComplianceMetrics[];
+}
+
+export interface DateRange {
+  start_date: string;
+  end_date: string;
+}
+
+export interface DailyComplianceKPI {
+  date: string;
+  scheduled_uptime_hours: number;
+  actual_uptime_hours: number;
+  compliance_percentage: number;
+  unplanned_downtime_hours: number;
+  overtime_hours: number;
+  is_working_day: boolean;
+  source: string;
 }

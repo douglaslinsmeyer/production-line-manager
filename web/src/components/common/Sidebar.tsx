@@ -5,6 +5,7 @@ import {
   HomeIcon,
   ChartBarIcon,
   TagIcon,
+  CalendarDaysIcon,
   DocumentTextIcon,
   XMarkIcon,
   ChevronDoubleLeftIcon,
@@ -36,6 +37,11 @@ const navigationItems: NavItem[] = [
     name: 'Analytics',
     path: '/analytics',
     icon: ChartBarIcon,
+  },
+  {
+    name: 'Schedules',
+    path: '/schedules',
+    icon: CalendarDaysIcon,
   },
   {
     name: 'Labels',

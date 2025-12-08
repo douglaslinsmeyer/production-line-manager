@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useLine, useUpdateLine } from '@/hooks/useLines';
 import { linesApi } from '@/api/lines';
+import { useAssignScheduleToLine } from '@/hooks/useSchedules';
 import Loading from '@/components/common/Loading';
 import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
@@ -13,6 +14,7 @@ export default function EditLine() {
   const navigate = useNavigate();
   const { data: line, isLoading, error: fetchError } = useLine(id!);
   const updateLine = useUpdateLine(id!);
+  const assignSchedule = useAssignScheduleToLine();
 
   const handleSubmit = async (data: any) => {
     try {
@@ -28,6 +30,16 @@ export default function EditLine() {
           id,
           data.labels.map((l: any) => l.id)
         );
+      }
+
+      // Step 3: Update schedule assignment
+      // Always call this to allow removing schedule (null) or assigning new one
+      if (id) {
+        const scheduleId = data.schedule_id || null;
+        await assignSchedule.mutateAsync({
+          lineId: id,
+          scheduleId,
+        });
       }
 
       toast.success('Production line updated successfully!');
@@ -104,10 +116,11 @@ export default function EditLine() {
             name: line.name,
             description: line.description,
             labels: line.labels || [],
+            schedule_id: line.schedule_id || '',
           }}
           onSubmit={handleSubmit}
           onCancel={handleCancel}
-          isSubmitting={updateLine.isPending}
+          isSubmitting={updateLine.isPending || assignSchedule.isPending}
         />
       </Card>
     </div>

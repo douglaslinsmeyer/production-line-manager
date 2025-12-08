@@ -78,3 +78,60 @@ type AnalyticsResponse struct {
 	Metrics  interface{}    `json:"metrics"` // Can be AggregateMetrics, []LineMetrics, etc.
 	CachedAt *time.Time     `json:"cached_at,omitempty"`
 }
+
+// ========== Schedule Compliance Types ==========
+
+// ComplianceQuery represents parameters for compliance queries
+type ComplianceQuery struct {
+	StartDate string      `json:"start_date"` // YYYY-MM-DD format
+	EndDate   string      `json:"end_date"`   // YYYY-MM-DD format
+	LabelIDs  []uuid.UUID `json:"label_ids,omitempty"`
+	LineIDs   []uuid.UUID `json:"line_ids,omitempty"`
+}
+
+// LineComplianceMetrics represents compliance metrics for a single line
+type LineComplianceMetrics struct {
+	LineID                 uuid.UUID `json:"line_id"`
+	LineCode               string    `json:"line_code"`
+	LineName               string    `json:"line_name"`
+	ScheduleID             *uuid.UUID `json:"schedule_id,omitempty"`
+	ScheduleName           *string    `json:"schedule_name,omitempty"`
+	ScheduledUptimeHours   float64   `json:"scheduled_uptime_hours"`
+	ActualUptimeHours      float64   `json:"actual_uptime_hours"`
+	CompliancePercentage   float64   `json:"compliance_percentage"`
+	UnplannedDowntimeHours float64   `json:"unplanned_downtime_hours"`
+	OvertimeHours          float64   `json:"overtime_hours"`
+	ScheduledDays          int       `json:"scheduled_days"`
+	WorkingDays            int       `json:"working_days"`
+}
+
+// AggregateComplianceMetrics represents overall compliance metrics
+type AggregateComplianceMetrics struct {
+	TotalLines             int                     `json:"total_lines"`
+	LinesWithSchedule      int                     `json:"lines_with_schedule"`
+	TotalScheduledHours    float64                 `json:"total_scheduled_hours"`
+	TotalActualHours       float64                 `json:"total_actual_hours"`
+	AverageCompliance      float64                 `json:"average_compliance_percentage"`
+	TotalUnplannedDowntime float64                 `json:"total_unplanned_downtime_hours"`
+	TotalOvertime          float64                 `json:"total_overtime_hours"`
+	DateRange              DateRange               `json:"date_range"`
+	LineMetrics            []LineComplianceMetrics `json:"line_metrics,omitempty"`
+}
+
+// DateRange represents a date period (without time)
+type DateRange struct {
+	StartDate string `json:"start_date"` // YYYY-MM-DD
+	EndDate   string `json:"end_date"`   // YYYY-MM-DD
+}
+
+// DailyComplianceKPI represents compliance for a single day
+type DailyComplianceKPI struct {
+	Date                   string  `json:"date"` // YYYY-MM-DD
+	ScheduledUptimeHours   float64 `json:"scheduled_uptime_hours"`
+	ActualUptimeHours      float64 `json:"actual_uptime_hours"`
+	CompliancePercentage   float64 `json:"compliance_percentage"`
+	UnplannedDowntimeHours float64 `json:"unplanned_downtime_hours"`
+	OvertimeHours          float64 `json:"overtime_hours"`
+	IsWorkingDay           bool    `json:"is_working_day"`
+	Source                 string  `json:"source"` // "base", "holiday", "exception", "line_exception"
+}
