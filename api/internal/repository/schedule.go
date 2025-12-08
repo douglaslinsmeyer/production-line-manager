@@ -528,7 +528,7 @@ func (r *ScheduleRepository) SetDayBreaks(ctx context.Context, dayID uuid.UUID, 
 // GetHolidays retrieves all holidays for a schedule
 func (r *ScheduleRepository) GetHolidays(ctx context.Context, scheduleID uuid.UUID) ([]domain.ScheduleHoliday, error) {
 	query := `
-		SELECT id, schedule_id, holiday_date, name, created_at
+		SELECT id, schedule_id, holiday_date::text, name, created_at
 		FROM schedule_holidays
 		WHERE schedule_id = $1
 		ORDER BY holiday_date ASC
@@ -562,7 +562,7 @@ func (r *ScheduleRepository) CreateHoliday(ctx context.Context, scheduleID uuid.
 	query := `
 		INSERT INTO schedule_holidays (schedule_id, holiday_date, name)
 		VALUES ($1, $2, $3)
-		RETURNING id, schedule_id, holiday_date, name, created_at
+		RETURNING id, schedule_id, holiday_date::text, name, created_at
 	`
 
 	var h domain.ScheduleHoliday
@@ -583,7 +583,7 @@ func (r *ScheduleRepository) CreateHoliday(ctx context.Context, scheduleID uuid.
 // GetHoliday retrieves a holiday by ID
 func (r *ScheduleRepository) GetHoliday(ctx context.Context, holidayID uuid.UUID) (*domain.ScheduleHoliday, error) {
 	query := `
-		SELECT id, schedule_id, holiday_date, name, created_at
+		SELECT id, schedule_id, holiday_date::text, name, created_at
 		FROM schedule_holidays
 		WHERE id = $1
 	`
@@ -609,7 +609,7 @@ func (r *ScheduleRepository) UpdateHoliday(ctx context.Context, holidayID uuid.U
 		SET holiday_date = COALESCE($2, holiday_date),
 		    name = COALESCE($3, name)
 		WHERE id = $1
-		RETURNING id, schedule_id, holiday_date, name, created_at
+		RETURNING id, schedule_id, holiday_date::text, name, created_at
 	`
 
 	var h domain.ScheduleHoliday
