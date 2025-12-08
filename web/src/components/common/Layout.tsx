@@ -1,37 +1,46 @@
-import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useSidebar } from '../../hooks/useSidebar';
+import MobileMenuButton from './MobileMenuButton';
+import Sidebar from './Sidebar';
 
 interface LayoutProps {
   children: ReactNode;
 }
 
 export default function Layout({ children }: LayoutProps) {
+  const location = useLocation();
+  const { isCollapsed, isMobileOpen, toggleCollapsed, toggleMobileMenu, closeMobileMenu } = useSidebar();
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    closeMobileMenu();
+  }, [location.pathname, closeMobileMenu]);
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <Link to="/" className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">
-                Production Line Manager
-              </h1>
-            </Link>
-            <nav className="flex space-x-4">
-              <Link
-                to="/"
-                className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
-              >
-                Dashboard
-              </Link>
-            </nav>
-          </div>
-        </div>
-      </header>
+      {/* Mobile menu button */}
+      <MobileMenuButton onClick={toggleMobileMenu} isOpen={isMobileOpen} />
+
+      {/* Sidebar */}
+      <Sidebar
+        isCollapsed={isCollapsed}
+        isMobileOpen={isMobileOpen}
+        onToggleCollapsed={toggleCollapsed}
+        onCloseMobile={closeMobileMenu}
+      />
 
       {/* Main content */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {children}
+      <main
+        className={`
+          transition-all duration-300 min-h-screen
+          ${isCollapsed ? 'lg:ml-16' : 'lg:ml-64'}
+          pt-16 lg:pt-0
+        `.trim()}
+      >
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          {children}
+        </div>
       </main>
     </div>
   );

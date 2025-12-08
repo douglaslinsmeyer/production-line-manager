@@ -11,8 +11,10 @@ import DeleteConfirmModal from '@/components/lines/DeleteConfirmModal';
 import StatusHistoryChart from '@/components/analytics/StatusHistoryChart';
 import StatusTimeline from '@/components/analytics/StatusTimeline';
 import UptimeMetrics from '@/components/analytics/UptimeMetrics';
-import TimeRangeSelector, { type TimeRange } from '@/components/analytics/TimeRangeSelector';
+import TimeRangeSelector from '@/components/analytics/TimeRangeSelector';
+import LabelBadge from '@/components/labels/LabelBadge';
 import { formatDate, formatRelativeTime } from '@/utils/formatters';
+import type { TimeRange } from '@/api/types';
 
 export default function LineDetail() {
   const { id } = useParams<{ id: string }>();
@@ -106,6 +108,17 @@ export default function LineDetail() {
               <div>
                 <dt className="text-sm font-medium text-gray-500">Description</dt>
                 <dd className="mt-1 text-gray-900">{line.description}</dd>
+              </div>
+            )}
+
+            {line.labels && line.labels.length > 0 && (
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Labels</dt>
+                <dd className="mt-1 flex flex-wrap gap-2">
+                  {line.labels.map((label) => (
+                    <LabelBadge key={label.id} label={label} />
+                  ))}
+                </dd>
               </div>
             )}
 

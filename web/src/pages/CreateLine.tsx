@@ -2,6 +2,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useCreateLine } from '@/hooks/useLines';
+import { linesApi } from '@/api/lines';
 import type { CreateLineRequest } from '@/api/types';
 import Card from '@/components/common/Card';
 import Button from '@/components/common/Button';
@@ -11,9 +12,23 @@ export default function CreateLine() {
   const navigate = useNavigate();
   const createLine = useCreateLine();
 
-  const handleSubmit = async (data: CreateLineRequest) => {
+  const handleSubmit = async (data: any) => {
     try {
-      await createLine.mutateAsync(data);
+      // Step 1: Create line
+      const createdLine = await createLine.mutateAsync({
+        code: data.code,
+        name: data.name,
+        description: data.description,
+      });
+
+      // Step 2: Assign labels if any
+      if (data.labels && data.labels.length > 0) {
+        await linesApi.assignLabels(
+          createdLine.id,
+          data.labels.map((l: any) => l.id)
+        );
+      }
+
       toast.success(`Production line "${data.name}" created successfully!`);
       navigate('/', { replace: true });
     } catch (err) {

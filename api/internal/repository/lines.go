@@ -81,6 +81,13 @@ func (r *LineRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Pro
 		return nil, fmt.Errorf("failed to get production line by id: %w", err)
 	}
 
+	// Load labels for this line
+	labels, err := r.getLabelsForLine(ctx, line.ID)
+	if err != nil {
+		return nil, err
+	}
+	line.Labels = labels
+
 	return &line, nil
 }
 
@@ -154,6 +161,12 @@ func (r *LineRepository) List(ctx context.Context) ([]domain.ProductionLine, err
 	// Return empty slice instead of nil for better JSON marshaling
 	if lines == nil {
 		lines = []domain.ProductionLine{}
+	}
+
+	// Enrich lines with labels
+	lines, err = r.enrichWithLabels(ctx, lines)
+	if err != nil {
+		return nil, err
 	}
 
 	return lines, nil
@@ -241,4 +254,147 @@ func (r *LineRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 
 	return nil
+}
+
+// enrichWithLabels loads labels for multiple lines in a single query (prevents N+1)
+func (r *LineRepository) enrichWithLabels(ctx context.Context, lines []domain.ProductionLine) ([]domain.ProductionLine, error) {
+	if len(lines) == 0 {
+		return lines, nil
+	}
+
+	// Collect all line IDs
+	lineIDs := make([]uuid.UUID, len(lines))
+	for i, line := range lines {
+		lineIDs[i] = line.ID
+	}
+
+	// Query all labels for these lines in one query
+	query := `
+		SELECT pll.line_id, l.id, l.name, l.color, l.description, l.created_at, l.updated_at
+		FROM labels l
+		INNER JOIN production_line_labels pll ON l.id = pll.label_id
+		WHERE pll.line_id = ANY($1)
+		ORDER BY pll.line_id, l.name
+	`
+
+	rows, err := r.db.Query(ctx, query, lineIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load labels: %w", err)
+	}
+	defer rows.Close()
+
+	// Build a map of line_id -> []Label
+	labelsMap := make(map[uuid.UUID][]domain.Label)
+	for rows.Next() {
+		var lineID uuid.UUID
+		var label domain.Label
+		err := rows.Scan(
+			&lineID,
+			&label.ID,
+			&label.Name,
+			&label.Color,
+			&label.Description,
+			&label.CreatedAt,
+			&label.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan label: %w", err)
+		}
+		labelsMap[lineID] = append(labelsMap[lineID], label)
+	}
+
+	// Attach labels to each line
+	for i := range lines {
+		if labels, ok := labelsMap[lines[i].ID]; ok {
+			lines[i].Labels = labels
+		} else {
+			lines[i].Labels = []domain.Label{}
+		}
+	}
+
+	return lines, nil
+}
+
+// getLabelsForLine retrieves labels for a single line (helper for GetByID)
+func (r *LineRepository) getLabelsForLine(ctx context.Context, lineID uuid.UUID) ([]domain.Label, error) {
+	query := `
+		SELECT l.id, l.name, l.color, l.description, l.created_at, l.updated_at
+		FROM labels l
+		INNER JOIN production_line_labels pll ON l.id = pll.label_id
+		WHERE pll.line_id = $1
+		ORDER BY l.name ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, lineID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get labels for line: %w", err)
+	}
+	defer rows.Close()
+
+	var labels []domain.Label
+	for rows.Next() {
+		var label domain.Label
+		err := rows.Scan(
+			&label.ID,
+			&label.Name,
+			&label.Color,
+			&label.Description,
+			&label.CreatedAt,
+			&label.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan label: %w", err)
+		}
+		labels = append(labels, label)
+	}
+
+	if labels == nil {
+		labels = []domain.Label{}
+	}
+
+	return labels, nil
+}
+
+// ListByLabels retrieves production lines that have ANY of the specified labels (OR logic)
+func (r *LineRepository) ListByLabels(ctx context.Context, labelIDs []uuid.UUID) ([]domain.ProductionLine, error) {
+	query := `
+		SELECT DISTINCT pl.id, pl.code, pl.name, pl.description, pl.status,
+		       pl.created_at, pl.updated_at
+		FROM production_lines pl
+		INNER JOIN production_line_labels pll ON pl.id = pll.line_id
+		WHERE pl.deleted_at IS NULL
+		  AND pll.label_id = ANY($1)
+		ORDER BY pl.code ASC
+	`
+
+	rows, err := r.db.Query(ctx, query, labelIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list lines by labels: %w", err)
+	}
+	defer rows.Close()
+
+	var lines []domain.ProductionLine
+	for rows.Next() {
+		var line domain.ProductionLine
+		err := rows.Scan(
+			&line.ID,
+			&line.Code,
+			&line.Name,
+			&line.Description,
+			&line.Status,
+			&line.CreatedAt,
+			&line.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan line: %w", err)
+		}
+		lines = append(lines, line)
+	}
+
+	if lines == nil {
+		lines = []domain.ProductionLine{}
+	}
+
+	// Enrich with labels
+	return r.enrichWithLabels(ctx, lines)
 }

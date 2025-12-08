@@ -2,6 +2,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useLine, useUpdateLine } from '@/hooks/useLines';
+import { linesApi } from '@/api/lines';
 import type { UpdateLineRequest } from '@/api/types';
 import Loading from '@/components/common/Loading';
 import Card from '@/components/common/Card';
@@ -14,9 +15,22 @@ export default function EditLine() {
   const { data: line, isLoading, error: fetchError } = useLine(id!);
   const updateLine = useUpdateLine(id!);
 
-  const handleSubmit = async (data: UpdateLineRequest) => {
+  const handleSubmit = async (data: any) => {
     try {
-      await updateLine.mutateAsync(data);
+      // Step 1: Update line details
+      await updateLine.mutateAsync({
+        name: data.name,
+        description: data.description,
+      });
+
+      // Step 2: Update labels if present
+      if (data.labels && id) {
+        await linesApi.assignLabels(
+          id,
+          data.labels.map((l: any) => l.id)
+        );
+      }
+
       toast.success('Production line updated successfully!');
       navigate(`/lines/${id}`, { replace: true });
     } catch (err) {
@@ -90,6 +104,7 @@ export default function EditLine() {
           initialData={{
             name: line.name,
             description: line.description,
+            labels: line.labels || [],
           }}
           onSubmit={handleSubmit}
           onCancel={handleCancel}

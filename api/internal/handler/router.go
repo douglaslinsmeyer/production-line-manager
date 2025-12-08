@@ -10,7 +10,13 @@ import (
 )
 
 // NewRouter creates and configures the HTTP router
-func NewRouter(lineService *service.LineService, corsOrigins string, logger *zap.Logger) *chi.Mux {
+func NewRouter(
+	lineService *service.LineService,
+	labelService *service.LabelService,
+	analyticsService *service.AnalyticsService,
+	corsOrigins string,
+	logger *zap.Logger,
+) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Middleware stack
@@ -28,6 +34,8 @@ func NewRouter(lineService *service.LineService, corsOrigins string, logger *zap
 	// Create handlers
 	healthHandler := NewHealthHandler()
 	lineHandler := NewLineHandler(lineService, logger)
+	labelHandler := NewLabelHandler(labelService, logger)
+	analyticsHandler := NewAnalyticsHandler(analyticsService, logger)
 
 	// Health check
 	r.Get("/health", healthHandler.Health)
@@ -52,6 +60,33 @@ func NewRouter(lineService *service.LineService, corsOrigins string, logger *zap
 				// Status endpoints
 				r.Post("/status", lineHandler.SetStatus)
 				r.Get("/status/history", lineHandler.GetStatusHistory)
+
+				// Label endpoints
+				r.Get("/labels", labelHandler.GetLabelsForLine)
+				r.Put("/labels", labelHandler.AssignToLine)
+			})
+		})
+
+		// Labels
+		r.Route("/labels", func(r chi.Router) {
+			r.Get("/", labelHandler.List)
+			r.Post("/", labelHandler.Create)
+
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", labelHandler.Get)
+				r.Put("/", labelHandler.Update)
+				r.Delete("/", labelHandler.Delete)
+			})
+		})
+
+		// Analytics
+		r.Route("/analytics", func(r chi.Router) {
+			r.Get("/aggregate", analyticsHandler.GetAggregateMetrics)
+			r.Get("/lines", analyticsHandler.GetLineMetrics)
+			r.Get("/labels", analyticsHandler.GetLabelMetrics)
+
+			r.Route("/lines/{id}", func(r chi.Router) {
+				r.Get("/daily", analyticsHandler.GetDailyKPIs)
 			})
 		})
 	})

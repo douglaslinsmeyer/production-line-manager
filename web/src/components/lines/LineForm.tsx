@@ -1,10 +1,13 @@
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Button from '@/components/common/Button';
+import LabelInput from '@/components/labels/LabelInput';
+import { useLabels } from '@/hooks/useLines';
+import type { Label } from '@/api/types';
 
-// Validation schema
-const lineSchema = z.object({
+// Validation schemas
+const createLineSchema = z.object({
   code: z
     .string()
     .min(1, 'Code is required')
@@ -14,9 +17,19 @@ const lineSchema = z.object({
     .min(1, 'Name is required')
     .max(255, 'Name must be 255 characters or less'),
   description: z.string().optional(),
+  labels: z.array(z.custom<Label>()).optional(),
 });
 
-type LineFormData = z.infer<typeof lineSchema>;
+const editLineSchema = z.object({
+  name: z
+    .string()
+    .min(1, 'Name is required')
+    .max(255, 'Name must be 255 characters or less'),
+  description: z.string().optional(),
+  labels: z.array(z.custom<Label>()).optional(),
+});
+
+type LineFormData = z.infer<typeof createLineSchema>;
 
 interface LineFormProps {
   initialData?: Partial<LineFormData>;
@@ -36,11 +49,14 @@ export default function LineForm({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<LineFormData>({
-    resolver: zodResolver(lineSchema),
+    resolver: zodResolver(mode === 'create' ? createLineSchema : editLineSchema),
     defaultValues: initialData,
   });
+
+  const { data: availableLabels = [] } = useLabels();
 
   const handleFormSubmit = async (data: LineFormData) => {
     try {
@@ -115,6 +131,28 @@ export default function LineForm({
         {errors.description && (
           <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
         )}
+      </div>
+
+      {/* Labels field */}
+      <div>
+        <label htmlFor="labels" className="block text-sm font-medium text-gray-700 mb-2">
+          Labels
+        </label>
+        <Controller
+          name="labels"
+          control={control}
+          render={({ field }) => (
+            <LabelInput
+              value={field.value || []}
+              onChange={field.onChange}
+              availableLabels={availableLabels}
+              placeholder="Add labels to categorize this line..."
+            />
+          )}
+        />
+        <p className="mt-1 text-sm text-gray-500">
+          Add labels like "production", "assembly", "testing" to organize lines
+        </p>
       </div>
 
       {/* Actions */}

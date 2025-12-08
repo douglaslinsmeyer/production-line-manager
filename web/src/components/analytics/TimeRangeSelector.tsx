@@ -1,11 +1,11 @@
-export type TimeRange = '24h' | '7d' | '30d' | 'all';
+import type { TimeRange } from '@/api/types';
 
 interface TimeRangeSelectorProps {
   value: TimeRange;
   onChange: (range: TimeRange) => void;
 }
 
-const timeRangeOptions: { value: TimeRange; label: string }[] = [
+const timeRangeOptions: { value: Exclude<TimeRange, 'custom'>; label: string }[] = [
   { value: '24h', label: 'Last 24 Hours' },
   { value: '7d', label: 'Last 7 Days' },
   { value: '30d', label: 'Last 30 Days' },

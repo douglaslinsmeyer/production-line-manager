@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/common/Layout';
 import Dashboard from './pages/Dashboard';
+import AnalyticsPage from './pages/AnalyticsPage';
+import LabelsPage from './pages/LabelsPage';
 import LineDetail from './pages/LineDetail';
 import CreateLine from './pages/CreateLine';
 import EditLine from './pages/EditLine';
@@ -12,6 +14,8 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/labels" element={<LabelsPage />} />
           <Route path="/lines/new" element={<CreateLine />} />
           <Route path="/lines/:id" element={<LineDetail />} />
           <Route path="/lines/:id/edit" element={<EditLine />} />

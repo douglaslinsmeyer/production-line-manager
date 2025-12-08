@@ -8,6 +8,7 @@ import StatusBadge from '@/components/common/StatusBadge';
 import Button from '@/components/common/Button';
 import StatusForm from './StatusForm';
 import DeleteConfirmModal from './DeleteConfirmModal';
+import LabelBadge from '@/components/labels/LabelBadge';
 
 interface LineCardProps {
   line: ProductionLine;
@@ -37,6 +38,15 @@ export default function LineCard({ line }: LineCardProps) {
           {/* Description */}
           {line.description && (
             <p className="text-gray-600 text-sm line-clamp-2">{line.description}</p>
+          )}
+
+          {/* Labels */}
+          {line.labels && line.labels.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {line.labels.map((label) => (
+                <LabelBadge key={label.id} label={label} size="sm" />
+              ))}
+            </div>
           )}
 
           {/* Actions */}

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { linesApi } from '@/api/lines';
+import { linesApi, labelsApi } from '@/api/lines';
 import type { CreateLineRequest, UpdateLineRequest, Status } from '@/api/types';
 
 // Query keys for cache management
@@ -10,6 +10,8 @@ export const lineKeys = {
   details: () => [...lineKeys.all, 'detail'] as const,
   detail: (id: string) => [...lineKeys.details(), id] as const,
   history: (id: string) => [...lineKeys.detail(id), 'history'] as const,
+  labels: () => [...lineKeys.all, 'labels'] as const,
+  lineLabels: (id: string) => [...lineKeys.detail(id), 'labels'] as const,
 };
 
 // Get all production lines with auto-refetch
@@ -99,5 +101,40 @@ export function useStatusHistory(id: string, limit = 100) {
     queryFn: () => linesApi.getHistory(id, limit),
     enabled: !!id,
     refetchInterval: 10000, // Refetch every 10 seconds
+  });
+}
+
+// Get all labels
+export function useLabels() {
+  return useQuery({
+    queryKey: lineKeys.labels(),
+    queryFn: labelsApi.getLabels,
+    staleTime: 30000, // Labels change less frequently
+  });
+}
+
+// Get labels for a specific production line
+export function useLineLabels(id: string) {
+  return useQuery({
+    queryKey: lineKeys.lineLabels(id),
+    queryFn: () => linesApi.getLabelsForLine(id),
+    enabled: !!id,
+  });
+}
+
+// Assign labels to production line mutation
+export function useAssignLabels(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (labelIds: string[]) => linesApi.assignLabels(id, labelIds),
+    onSuccess: () => {
+      // Invalidate line details to reload with new labels
+      queryClient.invalidateQueries({ queryKey: lineKeys.detail(id) });
+      // Invalidate lists to show updated labels
+      queryClient.invalidateQueries({ queryKey: lineKeys.list() });
+      // Invalidate line labels cache
+      queryClient.invalidateQueries({ queryKey: lineKeys.lineLabels(id) });
+    },
   });
 }

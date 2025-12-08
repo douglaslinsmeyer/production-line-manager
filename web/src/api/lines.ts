@@ -7,6 +7,10 @@ import type {
   SetStatusRequest,
   StatusChange,
   Status,
+  Label,
+  AssignLabelsRequest,
+  CreateLabelRequest,
+  UpdateLabelRequest,
 } from './types';
 
 // Production Lines API
@@ -65,5 +69,59 @@ export const linesApi = {
       `/lines/${id}/status/history?limit=${limit}`
     );
     return response.data.data || [];
+  },
+
+  // Get labels for a production line
+  getLabelsForLine: async (id: string): Promise<Label[]> => {
+    const response = await client.get<APIResponse<Label[]>>(`/lines/${id}/labels`);
+    return response.data.data || [];
+  },
+
+  // Assign labels to a production line
+  assignLabels: async (id: string, labelIds: string[]): Promise<Label[]> => {
+    const request: AssignLabelsRequest = { label_ids: labelIds };
+    const response = await client.put<APIResponse<Label[]>>(`/lines/${id}/labels`, request);
+    return response.data.data || [];
+  },
+};
+
+// Labels API
+export const labelsApi = {
+  // Get all labels
+  getLabels: async (): Promise<Label[]> => {
+    const response = await client.get<APIResponse<Label[]>>('/labels');
+    return response.data.data || [];
+  },
+
+  // Get single label by ID
+  getLabel: async (id: string): Promise<Label> => {
+    const response = await client.get<APIResponse<Label>>(`/labels/${id}`);
+    if (!response.data.data) {
+      throw new Error('Label not found');
+    }
+    return response.data.data;
+  },
+
+  // Create new label
+  createLabel: async (data: CreateLabelRequest): Promise<Label> => {
+    const response = await client.post<APIResponse<Label>>('/labels', data);
+    if (!response.data.data) {
+      throw new Error('Failed to create label');
+    }
+    return response.data.data;
+  },
+
+  // Update label
+  updateLabel: async (id: string, data: UpdateLabelRequest): Promise<Label> => {
+    const response = await client.put<APIResponse<Label>>(`/labels/${id}`, data);
+    if (!response.data.data) {
+      throw new Error('Failed to update label');
+    }
+    return response.data.data;
+  },
+
+  // Delete label
+  deleteLabel: async (id: string): Promise<void> => {
+    await client.delete(`/labels/${id}`);
   },
 };

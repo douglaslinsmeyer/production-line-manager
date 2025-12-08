@@ -38,6 +38,7 @@ type ProductionLine struct {
 	Name        string     `json:"name" db:"name"`
 	Description *string    `json:"description,omitempty" db:"description"`
 	Status      Status     `json:"status" db:"status"`
+	Labels      []Label    `json:"labels,omitempty" db:"-"` // Loaded via JOIN, not from production_lines table
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`

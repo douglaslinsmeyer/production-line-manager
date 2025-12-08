@@ -1,9 +1,17 @@
 import axios from 'axios';
 import type { APIResponse } from './types';
 
+// Get the base API URL (with /api/v1 path)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+
+// Get the API server URL (without the /api/v1 path) for things like Swagger
+export const getApiServerUrl = (): string => {
+  return API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+};
+
 // Create axios instance with base configuration
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
