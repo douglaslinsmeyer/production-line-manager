@@ -6,6 +6,7 @@ import type {
   ScheduleDay,
   ScheduleBreak,
   ScheduleHoliday,
+  SuggestedHolidaysResponse,
   ScheduleException,
   LineScheduleException,
   EffectiveSchedule,
@@ -96,9 +97,10 @@ export const schedulesApi = {
 
 // Schedule Holidays API
 export const holidaysApi = {
-  // Get all holidays for a schedule
-  getHolidays: async (scheduleId: string): Promise<ScheduleHoliday[]> => {
-    const response = await client.get<APIResponse<ScheduleHoliday[]>>(`/schedules/${scheduleId}/holidays`);
+  // Get all holidays for a schedule, optionally filtered by year
+  getHolidays: async (scheduleId: string, year?: number): Promise<ScheduleHoliday[]> => {
+    const params = year ? `?year=${year}` : '';
+    const response = await client.get<APIResponse<ScheduleHoliday[]>>(`/schedules/${scheduleId}/holidays${params}`);
     return response.data.data || [];
   },
 
@@ -132,6 +134,15 @@ export const holidaysApi = {
   // Delete holiday
   deleteHoliday: async (scheduleId: string, holidayId: string): Promise<void> => {
     await client.delete(`/schedules/${scheduleId}/holidays/${holidayId}`);
+  },
+
+  // Get suggested public holidays from external API
+  getSuggestedHolidays: async (year: number): Promise<SuggestedHolidaysResponse> => {
+    const response = await client.get<APIResponse<SuggestedHolidaysResponse>>(`/suggested-holidays?year=${year}`);
+    if (!response.data.data) {
+      throw new Error('Failed to fetch suggested holidays');
+    }
+    return response.data.data;
   },
 };
 

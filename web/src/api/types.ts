@@ -195,6 +195,21 @@ export interface ScheduleHoliday {
   updated_at: string;
 }
 
+export interface SuggestedHoliday {
+  date: string; // YYYY-MM-DD
+  name: string;
+  type: string; // "Public", "Bank", etc.
+  nationwide: boolean;
+}
+
+export interface SuggestedHolidaysResponse {
+  holidays: SuggestedHoliday[];
+  country_code: string;
+  year: number;
+  cached: boolean;
+  error?: string;
+}
+
 export interface ScheduleExceptionDay {
   id: string;
   exception_id: string;

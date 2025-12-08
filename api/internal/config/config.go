@@ -28,6 +28,12 @@ type Config struct {
 
 	// CORS configuration
 	CORSAllowedOrigins string `envconfig:"CORS_ALLOWED_ORIGINS" default:""`
+
+	// Holidays API configuration (OpenHolidaysAPI.org)
+	// Supported countries: AD AL AT BE BG BR BY CH CZ DE EE ES FR HR HU IE IT LI LT LU LV MC MD MT MX NL PL PT RO RS SE SI SK SM VA ZA
+	// Note: US is not supported by this API
+	HolidaysAPIEnabled  bool   `envconfig:"HOLIDAYS_API_ENABLED" default:"true"`
+	HolidaysCountryCode string `envconfig:"HOLIDAYS_COUNTRY_CODE" default:"DE"`
 }
 
 // Load loads configuration from environment variables

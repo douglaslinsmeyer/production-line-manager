@@ -233,3 +233,20 @@ type ScheduleSummary struct {
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
 }
+
+// SuggestedHoliday represents a public holiday suggestion from external API
+type SuggestedHoliday struct {
+	Date       string `json:"date"`       // YYYY-MM-DD
+	Name       string `json:"name"`
+	Type       string `json:"type"`       // "Public", "Bank", etc.
+	Nationwide bool   `json:"nationwide"`
+}
+
+// SuggestedHolidaysResponse wraps the suggested holidays list
+type SuggestedHolidaysResponse struct {
+	Holidays    []SuggestedHoliday `json:"holidays"`
+	CountryCode string             `json:"country_code"`
+	Year        int                `json:"year"`
+	Cached      bool               `json:"cached"`
+	Error       *string            `json:"error,omitempty"`
+}

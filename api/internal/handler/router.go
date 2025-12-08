@@ -165,6 +165,9 @@ func NewRouter(
 		// Effective schedule (computed)
 		r.Get("/effective-schedule", scheduleHandler.GetEffectiveSchedule)
 		r.Get("/effective-schedule/range", scheduleHandler.GetEffectiveScheduleRange)
+
+		// Suggested holidays (from external API)
+		r.Get("/suggested-holidays", scheduleHandler.GetSuggestedHolidays)
 	})
 
 	return r

@@ -170,8 +170,8 @@ func (r *ScheduleRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain
 	}
 	schedule.Days = days
 
-	// Load holidays
-	holidays, err := r.GetHolidays(ctx, schedule.ID)
+	// Load holidays (all, no year filter)
+	holidays, err := r.GetHolidays(ctx, schedule.ID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -525,16 +525,30 @@ func (r *ScheduleRepository) SetDayBreaks(ctx context.Context, dayID uuid.UUID, 
 
 // ========== Holiday Operations ==========
 
-// GetHolidays retrieves all holidays for a schedule
-func (r *ScheduleRepository) GetHolidays(ctx context.Context, scheduleID uuid.UUID) ([]domain.ScheduleHoliday, error) {
-	query := `
-		SELECT id, schedule_id, holiday_date::text, name, created_at
-		FROM schedule_holidays
-		WHERE schedule_id = $1
-		ORDER BY holiday_date ASC
-	`
+// GetHolidays retrieves all holidays for a schedule, optionally filtered by year
+func (r *ScheduleRepository) GetHolidays(ctx context.Context, scheduleID uuid.UUID, year *int) ([]domain.ScheduleHoliday, error) {
+	var query string
+	var args []interface{}
 
-	rows, err := r.db.Query(ctx, query, scheduleID)
+	if year != nil {
+		query = `
+			SELECT id, schedule_id, holiday_date::text, name, created_at
+			FROM schedule_holidays
+			WHERE schedule_id = $1 AND EXTRACT(YEAR FROM holiday_date) = $2
+			ORDER BY holiday_date ASC
+		`
+		args = []interface{}{scheduleID, *year}
+	} else {
+		query = `
+			SELECT id, schedule_id, holiday_date::text, name, created_at
+			FROM schedule_holidays
+			WHERE schedule_id = $1
+			ORDER BY holiday_date ASC
+		`
+		args = []interface{}{scheduleID}
+	}
+
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get holidays: %w", err)
 	}

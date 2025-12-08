@@ -9,28 +9,35 @@ import (
 	"go.uber.org/zap"
 
 	"ping/production-line-api/internal/domain"
+	"ping/production-line-api/internal/external/openholidays"
 	"ping/production-line-api/internal/repository"
 )
 
 // ScheduleService handles business logic for schedules
 type ScheduleService struct {
-	repo      *repository.ScheduleRepository
-	lineRepo  *repository.LineRepository
-	validator *validator.Validate
-	logger    *zap.Logger
+	repo            *repository.ScheduleRepository
+	lineRepo        *repository.LineRepository
+	holidaysClient  *openholidays.Client
+	holidaysCountry string
+	validator       *validator.Validate
+	logger          *zap.Logger
 }
 
 // NewScheduleService creates a new ScheduleService
 func NewScheduleService(
 	repo *repository.ScheduleRepository,
 	lineRepo *repository.LineRepository,
+	holidaysClient *openholidays.Client,
+	holidaysCountry string,
 	logger *zap.Logger,
 ) *ScheduleService {
 	return &ScheduleService{
-		repo:      repo,
-		lineRepo:  lineRepo,
-		validator: validator.New(),
-		logger:    logger,
+		repo:            repo,
+		lineRepo:        lineRepo,
+		holidaysClient:  holidaysClient,
+		holidaysCountry: holidaysCountry,
+		validator:       validator.New(),
+		logger:          logger,
 	}
 }
 
@@ -178,9 +185,9 @@ func (s *ScheduleService) SetDayBreaks(ctx context.Context, dayID uuid.UUID, req
 
 // ========== Holiday Operations ==========
 
-// GetHolidays retrieves all holidays for a schedule
-func (s *ScheduleService) GetHolidays(ctx context.Context, scheduleID uuid.UUID) ([]domain.ScheduleHoliday, error) {
-	return s.repo.GetHolidays(ctx, scheduleID)
+// GetHolidays retrieves all holidays for a schedule, optionally filtered by year
+func (s *ScheduleService) GetHolidays(ctx context.Context, scheduleID uuid.UUID, year *int) ([]domain.ScheduleHoliday, error) {
+	return s.repo.GetHolidays(ctx, scheduleID, year)
 }
 
 // CreateHoliday creates a holiday
@@ -235,6 +242,54 @@ func (s *ScheduleService) DeleteHoliday(ctx context.Context, holidayID uuid.UUID
 		return err
 	}
 	return nil
+}
+
+// GetSuggestedHolidays fetches public holidays from external API
+func (s *ScheduleService) GetSuggestedHolidays(ctx context.Context, year int) (*domain.SuggestedHolidaysResponse, error) {
+	if s.holidaysClient == nil {
+		errMsg := "holidays API not configured"
+		return &domain.SuggestedHolidaysResponse{
+			Holidays:    []domain.SuggestedHoliday{},
+			CountryCode: s.holidaysCountry,
+			Year:        year,
+			Cached:      false,
+			Error:       &errMsg,
+		}, nil
+	}
+
+	holidays, cached, err := s.holidaysClient.GetPublicHolidays(ctx, s.holidaysCountry, year)
+	if err != nil {
+		s.logger.Warn("failed to fetch suggested holidays",
+			zap.String("country", s.holidaysCountry),
+			zap.Int("year", year),
+			zap.Error(err))
+		errMsg := err.Error()
+		return &domain.SuggestedHolidaysResponse{
+			Holidays:    []domain.SuggestedHoliday{},
+			CountryCode: s.holidaysCountry,
+			Year:        year,
+			Cached:      false,
+			Error:       &errMsg,
+		}, nil
+	}
+
+	// Convert to domain type
+	suggested := make([]domain.SuggestedHoliday, 0, len(holidays))
+	for _, h := range holidays {
+		suggested = append(suggested, domain.SuggestedHoliday{
+			Date:       h.StartDate,
+			Name:       openholidays.GetName(h.Name),
+			Type:       h.Type,
+			Nationwide: h.Nationwide,
+		})
+	}
+
+	return &domain.SuggestedHolidaysResponse{
+		Holidays:    suggested,
+		CountryCode: s.holidaysCountry,
+		Year:        year,
+		Cached:      cached,
+	}, nil
 }
 
 // ========== Schedule Exception Operations ==========

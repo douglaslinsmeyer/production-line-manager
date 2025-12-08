@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -232,7 +234,7 @@ func (h *ScheduleHandler) SetDayBreaks(w http.ResponseWriter, r *http.Request) {
 
 // ========== Holiday Operations ==========
 
-// ListHolidays returns all holidays for a schedule
+// ListHolidays returns all holidays for a schedule, optionally filtered by year
 func (h *ScheduleHandler) ListHolidays(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -242,7 +244,18 @@ func (h *ScheduleHandler) ListHolidays(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	holidays, err := h.service.GetHolidays(ctx, scheduleID)
+	// Parse optional year filter
+	var year *int
+	if yearStr := r.URL.Query().Get("year"); yearStr != "" {
+		yearVal, err := strconv.Atoi(yearStr)
+		if err != nil || yearVal < 2000 || yearVal > 2100 {
+			writeError(w, http.StatusBadRequest, ErrCodeValidation, "Invalid year parameter", nil)
+			return
+		}
+		year = &yearVal
+	}
+
+	holidays, err := h.service.GetHolidays(ctx, scheduleID, year)
 	if err != nil {
 		h.logger.Error("failed to list holidays", zap.String("schedule_id", scheduleID.String()), zap.Error(err))
 		writeError(w, http.StatusInternalServerError, ErrCodeInternal, "Failed to list holidays", nil)
@@ -357,6 +370,34 @@ func (h *ScheduleHandler) DeleteHoliday(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetSuggestedHolidays returns suggested public holidays from external API
+func (h *ScheduleHandler) GetSuggestedHolidays(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Parse year from query param, default to current year
+	yearStr := r.URL.Query().Get("year")
+	var year int
+	if yearStr != "" {
+		var err error
+		year, err = strconv.Atoi(yearStr)
+		if err != nil || year < 2000 || year > 2100 {
+			writeError(w, http.StatusBadRequest, ErrCodeValidation, "Invalid year parameter", nil)
+			return
+		}
+	} else {
+		year = time.Now().Year()
+	}
+
+	response, err := h.service.GetSuggestedHolidays(ctx, year)
+	if err != nil {
+		h.logger.Error("failed to get suggested holidays", zap.Int("year", year), zap.Error(err))
+		writeError(w, http.StatusInternalServerError, ErrCodeInternal, "Failed to get suggested holidays", nil)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response)
 }
 
 // ========== Schedule Exception Operations ==========

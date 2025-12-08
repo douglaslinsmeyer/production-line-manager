@@ -40,6 +40,7 @@ export const scheduleKeys = {
   effective: () => ['effective-schedule'] as const,
   effectiveSingle: (lineId: string, date: string) => [...scheduleKeys.effective(), lineId, date] as const,
   effectiveRange: (lineId: string, startDate: string, endDate: string) => [...scheduleKeys.effective(), 'range', lineId, startDate, endDate] as const,
+  suggestedHolidays: (year: number) => ['suggested-holidays', year] as const,
 };
 
 // ========== Schedule CRUD ==========
@@ -185,6 +186,17 @@ export function useDeleteHoliday(scheduleId: string) {
       queryClient.removeQueries({ queryKey: scheduleKeys.holiday(scheduleId, holidayId) });
       queryClient.invalidateQueries({ queryKey: scheduleKeys.holidays(scheduleId) });
     },
+  });
+}
+
+// Get suggested public holidays from external API
+export function useSuggestedHolidays(year: number, enabled = true) {
+  return useQuery({
+    queryKey: scheduleKeys.suggestedHolidays(year),
+    queryFn: () => holidaysApi.getSuggestedHolidays(year),
+    enabled: enabled && !!year,
+    staleTime: 1000 * 60 * 60, // 1 hour - data changes infrequently
+    retry: 1, // Only retry once if fails
   });
 }
 
