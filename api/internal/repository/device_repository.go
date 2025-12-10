@@ -90,6 +90,18 @@ func (r *deviceRepository) GetDeviceByMAC(macAddress string) (*domain.Discovered
 	return &device, err
 }
 
+func (r *deviceRepository) DeleteDevice(macAddress string) error {
+	ctx := context.Background()
+
+	query := `
+		DELETE FROM discovered_devices
+		WHERE mac_address = $1
+	`
+
+	_, err := r.db.Exec(ctx, query, macAddress)
+	return err
+}
+
 func (r *deviceRepository) ListDevices() ([]*domain.DeviceWithAssignment, error) {
 	ctx := context.Background()
 

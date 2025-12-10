@@ -63,6 +63,40 @@ func (h *DeviceHandler) GetDevice(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(device)
 }
 
+// DeleteDevice removes a device from the system
+func (h *DeviceHandler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
+	macAddress := chi.URLParam(r, "mac")
+
+	// Check if device exists
+	device, err := h.deviceRepo.GetDeviceByMAC(macAddress)
+	if err != nil {
+		h.logger.Error("Failed to get device", zap.Error(err), zap.String("mac", macAddress))
+		http.Error(w, "Failed to retrieve device", http.StatusInternalServerError)
+		return
+	}
+
+	if device == nil {
+		http.Error(w, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	// Delete the device (cascade will handle assignments)
+	if err := h.deviceRepo.DeleteDevice(macAddress); err != nil {
+		h.logger.Error("Failed to delete device",
+			zap.Error(err),
+			zap.String("mac", macAddress))
+		http.Error(w, "Failed to delete device", http.StatusInternalServerError)
+		return
+	}
+
+	h.logger.Info("Device deleted", zap.String("mac", macAddress))
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Device deleted successfully",
+	})
+}
+
 // AssignDevice assigns a device to a production line
 func (h *DeviceHandler) AssignDevice(w http.ResponseWriter, r *http.Request) {
 	macAddress := chi.URLParam(r, "mac")

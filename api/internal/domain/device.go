@@ -87,6 +87,7 @@ type DeviceRepository interface {
 	// Device discovery and registration
 	UpsertDevice(device *DiscoveredDevice) error
 	GetDeviceByMAC(macAddress string) (*DiscoveredDevice, error)
+	DeleteDevice(macAddress string) error
 	ListDevices() ([]*DeviceWithAssignment, error)
 	UpdateDeviceStatus(macAddress string, status DeviceStatus) error
 	MarkStaleDevicesOffline(threshold time.Duration) error

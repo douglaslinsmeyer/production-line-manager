@@ -176,6 +176,7 @@ func NewRouter(
 
 			r.Route("/{mac}", func(r chi.Router) {
 				r.Get("/", deviceHandler.GetDevice)
+				r.Delete("/", deviceHandler.DeleteDevice)
 				r.Post("/assign", deviceHandler.AssignDevice)
 				r.Delete("/assign", deviceHandler.UnassignDevice)
 				r.Post("/identify", deviceHandler.IdentifyDevice)

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listDevices, identifyDevice, assignDevice, unassignDevice } from '../api/devices';
+import { listDevices, identifyDevice, assignDevice, unassignDevice, forgetDevice } from '../api/devices';
 import { linesApi } from '../api/lines';
 import type { DeviceWithAssignment } from '../types/device';
 import type { ProductionLine } from '../api/types';
@@ -57,6 +57,14 @@ export default function DeviceDiscovery() {
     },
   });
 
+  // Delete/forget device mutation
+  const forgetMutation = useMutation({
+    mutationFn: (macAddress: string) => forgetDevice(macAddress),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    },
+  });
+
   const handleFlash = (device: DeviceWithAssignment) => {
     flashMutation.mutate(device.mac_address);
   };
@@ -68,6 +76,12 @@ export default function DeviceDiscovery() {
   const handleUnassign = (device: DeviceWithAssignment) => {
     if (confirm(`Unassign device ${device.mac_address}?`)) {
       unassignMutation.mutate(device.mac_address);
+    }
+  };
+
+  const handleForget = (device: DeviceWithAssignment) => {
+    if (confirm(`Are you sure you want to forget device ${device.mac_address}? This will permanently remove it from the system.`)) {
+      forgetMutation.mutate(device.mac_address);
     }
   };
 
@@ -239,17 +253,27 @@ export default function DeviceDiscovery() {
 
                   {/* Actions */}
                   <td className="px-6 py-4 text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleFlash(device)}
-                      disabled={flashMutation.isPending || flashingDevices.has(device.mac_address)}
-                      className={`px-4 py-2 rounded-md text-white transition-colors ${
-                        flashingDevices.has(device.mac_address)
-                          ? 'bg-green-500 animate-pulse'
-                          : 'bg-blue-600 hover:bg-blue-700'
-                      } disabled:opacity-50`}
-                    >
-                      {flashingDevices.has(device.mac_address) ? 'Flashing...' : 'Flash'}
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => handleFlash(device)}
+                        disabled={flashMutation.isPending || flashingDevices.has(device.mac_address)}
+                        className={`px-4 py-2 rounded-md text-white transition-colors ${
+                          flashingDevices.has(device.mac_address)
+                            ? 'bg-green-500 animate-pulse'
+                            : 'bg-blue-600 hover:bg-blue-700'
+                        } disabled:opacity-50`}
+                      >
+                        {flashingDevices.has(device.mac_address) ? 'Flashing...' : 'Flash'}
+                      </button>
+                      <button
+                        onClick={() => handleForget(device)}
+                        disabled={forgetMutation.isPending}
+                        className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                        title="Forget this device"
+                      >
+                        Forget
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

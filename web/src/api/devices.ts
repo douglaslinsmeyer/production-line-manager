@@ -22,6 +22,11 @@ export async function getDevice(macAddress: string): Promise<DiscoveredDevice> {
   return response.data;
 }
 
+// Delete/forget a device from the system
+export async function forgetDevice(macAddress: string): Promise<void> {
+  await axios.delete(`${API_URL}/devices/${macAddress}`);
+}
+
 // Assign a device to a production line
 export async function assignDevice(
   macAddress: string,
