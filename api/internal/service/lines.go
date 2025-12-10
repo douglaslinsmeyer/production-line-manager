@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -19,30 +20,34 @@ type Publisher interface {
 	PublishUpdated(line *domain.ProductionLine) error
 	PublishDeleted(id uuid.UUID, code string) error
 	PublishStatus(line *domain.ProductionLine) error
+	PublishRaw(topic string, payload []byte) error
 }
 
 // LineService handles business logic for production lines
 type LineService struct {
-	repo      *repository.LineRepository
-	logRepo   *repository.StatusLogRepository
-	publisher Publisher
-	validator *validator.Validate
-	logger    *zap.Logger
+	repo       *repository.LineRepository
+	logRepo    *repository.StatusLogRepository
+	deviceRepo domain.DeviceRepository
+	publisher  Publisher
+	validator  *validator.Validate
+	logger     *zap.Logger
 }
 
 // NewLineService creates a new LineService
 func NewLineService(
 	repo *repository.LineRepository,
 	logRepo *repository.StatusLogRepository,
+	deviceRepo domain.DeviceRepository,
 	publisher Publisher,
 	logger *zap.Logger,
 ) *LineService {
 	return &LineService{
-		repo:      repo,
-		logRepo:   logRepo,
-		publisher: publisher,
-		validator: validator.New(),
-		logger:    logger,
+		repo:       repo,
+		logRepo:    logRepo,
+		deviceRepo: deviceRepo,
+		publisher:  publisher,
+		validator:  validator.New(),
+		logger:     logger,
 	}
 }
 
@@ -238,7 +243,102 @@ func (s *LineService) SetStatus(
 			zap.Error(err))
 	}
 
+	// Send tower light control commands to assigned device
+	if err := s.updateDeviceTowerLights(ctx, line); err != nil {
+		s.logger.Error("failed to update device tower lights",
+			zap.String("line_code", line.Code),
+			zap.String("line_id", line.ID.String()),
+			zap.Error(err))
+		// Don't fail the request, status change was successful
+	}
+
 	return line, nil
+}
+
+// updateDeviceTowerLights sends output control commands to device assigned to this line
+// Tower light mapping: CH0=Green (on), CH1=Yellow (maintenance), CH2=Red (off/error)
+func (s *LineService) updateDeviceTowerLights(ctx context.Context, line *domain.ProductionLine) error {
+	// Get device assigned to this line
+	assignment, err := s.deviceRepo.GetLineAssignment(line.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get line assignment: %w", err)
+	}
+
+	if assignment == nil {
+		// No device assigned - nothing to do
+		s.logger.Debug("no device assigned to line",
+			zap.String("line_code", line.Code))
+		return nil
+	}
+
+	s.logger.Info("updating tower lights for assigned device",
+		zap.String("line_code", line.Code),
+		zap.String("device_mac", assignment.DeviceMAC),
+		zap.String("status", line.Status.String()))
+
+	// Determine which outputs to turn on based on status
+	var greenOn, yellowOn, redOn bool
+
+	switch line.Status {
+	case domain.StatusOn:
+		greenOn = true
+		yellowOn = false
+		redOn = false
+	case domain.StatusMaintenance:
+		greenOn = false
+		yellowOn = true
+		redOn = false
+	case domain.StatusOff:
+		greenOn = false
+		yellowOn = false
+		redOn = true
+	case domain.StatusError:
+		greenOn = false
+		yellowOn = false
+		redOn = true
+	}
+
+	// Send commands to device
+	topic := fmt.Sprintf("devices/%s/command", assignment.DeviceMAC)
+
+	// Command to set green light (CH0)
+	if err := s.sendOutputCommand(topic, 0, greenOn); err != nil {
+		return err
+	}
+
+	// Command to set yellow light (CH1)
+	if err := s.sendOutputCommand(topic, 1, yellowOn); err != nil {
+		return err
+	}
+
+	// Command to set red light (CH2)
+	if err := s.sendOutputCommand(topic, 2, redOn); err != nil {
+		return err
+	}
+
+	s.logger.Info("tower lights updated",
+		zap.String("line_code", line.Code),
+		zap.Bool("green", greenOn),
+		zap.Bool("yellow", yellowOn),
+		zap.Bool("red", redOn))
+
+	return nil
+}
+
+// sendOutputCommand sends a set_output command to a device
+func (s *LineService) sendOutputCommand(topic string, channel int, state bool) error {
+	command := map[string]interface{}{
+		"command": "set_output",
+		"channel": channel,
+		"state":   state,
+	}
+
+	payload, err := json.Marshal(command)
+	if err != nil {
+		return fmt.Errorf("failed to marshal command: %w", err)
+	}
+
+	return s.publisher.PublishRaw(topic, payload)
 }
 
 // GetStatusHistory retrieves the status change history for a production line

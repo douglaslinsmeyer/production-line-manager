@@ -1,0 +1,39 @@
+#pragma once
+
+// Device Configuration
+// Device ID is MAC address (set dynamically at runtime)
+#define DEVICE_TYPE "ESP32-S3-POE-8DI8DO"
+#define FIRMWARE_VERSION "1.0.0"
+
+// MQTT Configuration
+#define MQTT_BROKER "10.221.21.100"  // Host machine IP where MQTT broker is running
+#define MQTT_PORT 1883
+#define MQTT_USER ""  // No auth by default
+#define MQTT_PASSWORD ""
+
+// MQTT Topics - Device Discovery Architecture
+#define MQTT_TOPIC_ANNOUNCE "devices/announce"
+#define MQTT_TOPIC_DEVICE_PREFIX "devices/"
+#define MQTT_TOPIC_COMMAND_SUFFIX "/command"
+#define MQTT_TOPIC_STATUS_SUFFIX "/status"
+#define MQTT_TOPIC_INPUT_SUFFIX "/input-change"
+
+// Legacy topics (for backward compatibility during migration)
+#define MQTT_TOPIC_LEGACY_COMMAND "production-lines/commands/status"
+#define MQTT_TOPIC_LEGACY_EVENT "production-lines/events/status"
+
+// Network Configuration
+#define USE_DHCP true
+#define STATIC_IP "192.168.1.100"
+#define GATEWAY "192.168.1.1"
+#define SUBNET "255.255.255.0"
+#define DNS_SERVER "8.8.8.8"
+
+// Timing Configuration
+#define HEARTBEAT_INTERVAL 30000  // 30 seconds
+#define DEBOUNCE_DELAY 50         // 50ms debounce for inputs
+#define BOOT_STABILIZATION_DELAY 100  // 100ms wait after boot for glitches to settle
+#define INPUT_READY_DELAY 50      // Additional 50ms before first input read
+
+// Hardware Configuration (from platformio.ini build_flags)
+// Pin definitions are in build_flags - no need to redefine here

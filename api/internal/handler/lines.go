@@ -30,16 +30,38 @@ func NewLineHandler(service *service.LineService, logger *zap.Logger) *LineHandl
 
 // List godoc
 // @Summary List production lines
-// @Description Get all active production lines
+// @Description Get all active production lines, optionally filtered by code
 // @Tags lines
 // @Accept json
 // @Produce json
+// @Param code query string false "Filter by line code"
 // @Success 200 {object} Response{data=[]domain.ProductionLine}
+// @Failure 404 {object} Response{error=APIError}
 // @Failure 500 {object} Response{error=APIError}
 // @Router /lines [get]
 func (h *LineHandler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Check if filtering by code
+	code := r.URL.Query().Get("code")
+	if code != "" {
+		// Get single line by code
+		line, err := h.service.GetByCode(ctx, code)
+		if err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				writeError(w, http.StatusNotFound, ErrCodeNotFound, "Production line not found", nil)
+				return
+			}
+			h.logger.Error("failed to get production line by code", zap.String("code", code), zap.Error(err))
+			writeError(w, http.StatusInternalServerError, ErrCodeInternal, "Failed to get production line", nil)
+			return
+		}
+		// Return as array to match expected response format
+		writeList(w, []domain.ProductionLine{*line}, 1)
+		return
+	}
+
+	// List all lines
 	lines, err := h.service.List(ctx)
 	if err != nil {
 		h.logger.Error("failed to list production lines", zap.Error(err))

@@ -16,6 +16,7 @@ func NewRouter(
 	analyticsService *service.AnalyticsService,
 	scheduleService *service.ScheduleService,
 	complianceService *service.ComplianceService,
+	deviceHandler *DeviceHandler,
 	corsOrigins string,
 	logger *zap.Logger,
 ) *chi.Mux {
@@ -168,6 +169,22 @@ func NewRouter(
 
 		// Suggested holidays (from external API)
 		r.Get("/suggested-holidays", scheduleHandler.GetSuggestedHolidays)
+
+		// Devices (IoT device discovery and management)
+		r.Route("/devices", func(r chi.Router) {
+			r.Get("/", deviceHandler.ListDevices)
+
+			r.Route("/{mac}", func(r chi.Router) {
+				r.Get("/", deviceHandler.GetDevice)
+				r.Post("/assign", deviceHandler.AssignDevice)
+				r.Delete("/assign", deviceHandler.UnassignDevice)
+				r.Post("/identify", deviceHandler.IdentifyDevice)
+				r.Post("/command", deviceHandler.SendCommand)
+			})
+		})
+
+		// Device assignment for a specific line
+		r.Get("/lines/{id}/device", deviceHandler.GetLineDevice)
 	})
 
 	return r

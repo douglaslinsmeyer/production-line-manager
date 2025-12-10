@@ -7,6 +7,7 @@ import {
   TagIcon,
   CalendarDaysIcon,
   DocumentTextIcon,
+  CpuChipIcon,
   XMarkIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
@@ -37,6 +38,11 @@ const navigationItems: NavItem[] = [
     name: 'Analytics',
     path: '/analytics',
     icon: ChartBarIcon,
+  },
+  {
+    name: 'Devices',
+    path: '/devices',
+    icon: CpuChipIcon,
   },
   {
     name: 'Schedules',

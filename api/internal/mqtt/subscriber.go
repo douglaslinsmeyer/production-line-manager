@@ -14,29 +14,59 @@ import (
 
 // Subscriber subscribes to MQTT command topics and processes them
 type Subscriber struct {
-	client      *Client
-	lineService *service.LineService
-	logger      *zap.Logger
+	client               *Client
+	lineService          *service.LineService
+	deviceDiscoveryHandler *DeviceDiscoveryHandler
+	logger               *zap.Logger
 }
 
 // NewSubscriber creates a new MQTT subscriber
-func NewSubscriber(client *Client, lineService *service.LineService, logger *zap.Logger) *Subscriber {
+func NewSubscriber(
+	client *Client,
+	lineService *service.LineService,
+	deviceDiscoveryHandler *DeviceDiscoveryHandler,
+	logger *zap.Logger,
+) *Subscriber {
 	return &Subscriber{
-		client:      client,
-		lineService: lineService,
-		logger:      logger,
+		client:               client,
+		lineService:          lineService,
+		deviceDiscoveryHandler: deviceDiscoveryHandler,
+		logger:               logger,
 	}
 }
 
 // Start starts subscribing to command topics
 func (s *Subscriber) Start() error {
-	// Subscribe to status command topic
+	// Subscribe to legacy production line status commands
 	if err := s.client.Subscribe(TopicCommandStatus, s.handleStatusCommand); err != nil {
 		return fmt.Errorf("failed to subscribe to status commands: %w", err)
 	}
 
+	// Subscribe to device announcements
+	if err := s.client.Subscribe("devices/announce", s.deviceDiscoveryHandler.HandleAnnouncement); err != nil {
+		return fmt.Errorf("failed to subscribe to device announcements: %w", err)
+	}
+
+	// Subscribe to all device status updates (wildcard)
+	if err := s.client.Subscribe("devices/+/status", s.deviceDiscoveryHandler.HandleDeviceStatus); err != nil {
+		return fmt.Errorf("failed to subscribe to device status: %w", err)
+	}
+
+	// Subscribe to all device input changes (wildcard)
+	if err := s.client.Subscribe("devices/+/input-change", s.deviceDiscoveryHandler.HandleInputChange); err != nil {
+		return fmt.Errorf("failed to subscribe to device input changes: %w", err)
+	}
+
+	// Start stale device monitor
+	s.deviceDiscoveryHandler.StartStaleDeviceMonitor()
+
 	s.logger.Info("mqtt subscriber started",
-		zap.String("topic", TopicCommandStatus))
+		zap.Strings("topics", []string{
+			TopicCommandStatus,
+			"devices/announce",
+			"devices/+/status",
+			"devices/+/input-change",
+		}))
 
 	return nil
 }

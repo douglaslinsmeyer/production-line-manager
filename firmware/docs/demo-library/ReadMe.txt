@@ -1,0 +1,29 @@
+中文：	（请全屏观看，以免换行导致的排版杂乱 ！！！！！）
+	（请全屏观看，以免换行导致的排版杂乱 ！！！！！）
+	（请全屏观看，以免换行导致的排版杂乱 ！！！！！）
+
+	Arduino			在 Arduino IDE 软件下使用
+	      example		      存放示例（可直接编译）
+	      libraries		      存放库文件（此文件夹仅在 Arduino 环境下使用！）
+				      注意：esp32 by Espressif Systems 须在 3.0.0 或以上（当前示例基于V3.0.2编程）
+
+	Firmware			测试固件	（通过"flash_download_tool_3.9.5"烧录，烧录地址为0x00。记得勾选前面的方框）
+
+
+	注意：若首次编译通过，在后续测试过程中遇到编译失败的情况，请重新解压本文件夹，再使用新文件执行编译
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+English: 	(Please watch in full screen to avoid typeset clutter caused by line breaks !!!!!)
+	(Please watch in full screen to avoid typeset clutter caused by line breaks !!!!!)
+	(Please watch in full screen to avoid typeset clutter caused by line breaks !!!!!)
+
+	Arduino 			Use under Arduino IDE software
+	      example 		      Store examples (Direct compilable)
+	      libraries 		      Store library files (This folder is only used in Arduino environment!)
+				      Note: esp32 by Espressif Systems must be 3.2.0 or above!(The current example is based on V3.0.2 programming)
+
+
+	Firmware 			Test firmware (burn at "flash_download_tool_3.9.5" at 0x00. Remember to check the previous box)
+
+
+	Note: If the compilation succeeds the first time and the compilation fails during subsequent tests, decompress the folder again and compile the new file

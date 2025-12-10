@@ -10,6 +10,7 @@ import SchedulesPage from './pages/SchedulesPage';
 import CreateSchedule from './pages/CreateSchedule';
 import ScheduleDetail from './pages/ScheduleDetail';
 import EditSchedule from './pages/EditSchedule';
+import DeviceDiscovery from './pages/DeviceDiscovery';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/labels" element={<LabelsPage />} />
+          <Route path="/devices" element={<DeviceDiscovery />} />
           <Route path="/lines/new" element={<CreateLine />} />
           <Route path="/lines/:id" element={<LineDetail />} />
           <Route path="/lines/:id/edit" element={<EditLine />} />

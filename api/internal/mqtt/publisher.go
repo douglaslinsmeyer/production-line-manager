@@ -72,6 +72,19 @@ func (p *Publisher) PublishStatus(line *domain.ProductionLine) error {
 	return p.publishEvent(TopicEventStatus, event)
 }
 
+// PublishRaw publishes raw payload to a topic
+func (p *Publisher) PublishRaw(topic string, payload []byte) error {
+	if err := p.client.Publish(topic, payload); err != nil {
+		return err
+	}
+
+	p.logger.Info("message published",
+		zap.String("topic", topic),
+		zap.Int("payload_size", len(payload)))
+
+	return nil
+}
+
 // publishEvent is a helper function to marshal and publish events
 func (p *Publisher) publishEvent(topic string, event interface{}) error {
 	payload, err := json.Marshal(event)
