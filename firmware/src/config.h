@@ -35,5 +35,21 @@
 #define BOOT_STABILIZATION_DELAY 100  // 100ms wait after boot for glitches to settle
 #define INPUT_READY_DELAY 50      // Additional 50ms before first input read
 
+// WiFi Configuration
+#define WIFI_AP_CHANNEL 6                 // WiFi channel for AP mode
+#define WIFI_AP_MAX_CONNECTIONS 4         // Max clients in AP mode
+#define WIFI_CONNECTION_TIMEOUT 30000     // 30 seconds to connect
+#define WIFI_RECONNECT_MAX_ATTEMPTS 10    // Max reconnection attempts before entering AP mode
+#define WIFI_RECONNECT_INITIAL_DELAY 5000 // 5 seconds initial delay
+#define WIFI_RECONNECT_MAX_DELAY 60000    // 60 seconds max delay
+
+// Boot Button Configuration
+#define BOOT_BUTTON_PIN 0                 // GPIO0 is the BOOT button on ESP32-S3
+#define BOOT_BUTTON_LONG_PRESS 15000      // 15 seconds for long press (AP mode trigger)
+#define BOOT_BUTTON_WARNING_TIME 10000    // 10 seconds warning (beep)
+
+// MQTT Buffer Configuration
+#define MQTT_MAX_PACKET_SIZE 512          // Maximum MQTT packet size
+
 // Hardware Configuration (from platformio.ini build_flags)
 // Pin definitions are in build_flags - no need to redefine here

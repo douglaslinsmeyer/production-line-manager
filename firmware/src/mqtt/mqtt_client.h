@@ -33,7 +33,7 @@ public:
     bool publishAnnouncement();
 
     // Publish status event
-    bool publishStatus(uint8_t inputs, uint8_t outputs, bool ethConnected);
+    bool publishStatus(uint8_t inputs, uint8_t outputs, bool networkConnected);
 
     // Publish input change event
     bool publishInputChange(uint8_t channel, bool state, uint8_t allInputs);

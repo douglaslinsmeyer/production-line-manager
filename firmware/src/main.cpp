@@ -1,13 +1,16 @@
 #include <Arduino.h>
 #include "config.h"
-#include "ethernet/eth_manager.h"
+#include "device_config.h"
+#include "network/connection_manager.h"
+#include "gpio/boot_button.h"
 #include "gpio/digital_input.h"
 #include "gpio/digital_output.h"
 #include "mqtt/mqtt_client.h"
 #include "identification.h"
 
 // Global managers
-EthernetManager ethernet;
+ConnectionManager networkManager;
+BootButton bootButton;
 DigitalInputManager inputs;
 DigitalOutputManager outputs;
 MQTTClientManager mqtt;
@@ -21,9 +24,10 @@ unsigned long lastHeartbeat = 0;
 unsigned long lastAnnouncement = 0;
 
 void onInputChange(uint8_t channel, bool state);
-void onEthernetConnection(bool connected);
+void onNetworkConnection(bool connected);
 void onMQTTCommand(const char* command, uint8_t channel, bool state);
 void onFlashIdentify();
+void onBootButtonLongPress(uint32_t duration);
 String getMACAddress();
 
 void setup() {
@@ -33,14 +37,9 @@ void setup() {
     Serial.begin(115200);
     delay(1000);  // Wait for USB enumeration
 
-    // Get MAC address for device identification
-    String macStr = getMACAddress();
-    macStr.toCharArray(deviceMAC, sizeof(deviceMAC));
-
     Serial.println("\n\n==============================================");
     Serial.println("  Waveshare ESP32-S3-POE-ETH-8DI-8DO");
     Serial.printf("  Firmware Version: %s\n", FIRMWARE_VERSION);
-    Serial.printf("  Device ID (MAC): %s\n", deviceMAC);
     Serial.printf("  Device Type: %s\n", DEVICE_TYPE);
     Serial.println("==============================================\n");
 
@@ -53,7 +52,51 @@ void setup() {
     Serial.println("Boot stabilization complete\n");
 
     // ===================================================================
-    // STEP 3: Initialize I2C for TCA9554PWR
+    // STEP 3: Get MAC Address for Device Identification
+    // ===================================================================
+    String macStr = getMACAddress();
+    macStr.toCharArray(deviceMAC, sizeof(deviceMAC));
+    Serial.printf("Device ID (MAC): %s\n\n", deviceMAC);
+
+    // ===================================================================
+    // STEP 4: Initialize Boot Button Handler
+    // ===================================================================
+    Serial.println("Initializing boot button handler...");
+    bootButton.begin();
+    bootButton.setLongPressCallback(onBootButtonLongPress);
+
+    // Check for long press during boot (15s hold to enter AP mode)
+    Serial.println("Checking for AP mode trigger (hold BOOT for 15s)...");
+    unsigned long bootCheckStart = millis();
+    while (millis() - bootCheckStart < 15100) {  // Check for 15.1 seconds
+        bootButton.update();
+        if (bootButton.longPressDetected()) {
+            Serial.println("\n!!! BOOT BUTTON HELD 15 SECONDS !!!");
+            Serial.println("Entering AP Mode - Clearing WiFi credentials");
+
+            // Clear WiFi credentials and force AP mode
+            deviceConfig.clearWiFiCredentials();
+            deviceConfig.save();
+
+            // Visual feedback
+            Serial.println("Configuration cleared. Device will enter AP mode on boot.\n");
+
+            bootButton.resetLongPress();
+            break;
+        }
+        delay(10);
+    }
+    Serial.println("Boot button check complete\n");
+
+    // ===================================================================
+    // STEP 5: Load Device Configuration from NVS
+    // ===================================================================
+    Serial.println("Loading device configuration from NVS...");
+    deviceConfig.begin();
+    deviceConfig.printSettings();
+
+    // ===================================================================
+    // STEP 6: Initialize I2C for TCA9554PWR
     // Note: GPIO41/42 are JTAG pins - hardware JTAG will be disabled
     // ===================================================================
     Serial.println("Initializing I2C...");
@@ -63,7 +106,7 @@ void setup() {
     Serial.println("  Use USB Serial/JTAG on GPIO19/20 for debugging\n");
 
     // ===================================================================
-    // STEP 4: Initialize Digital Outputs
+    // STEP 7: Initialize Digital Outputs
     // ===================================================================
     Serial.println("Initializing digital outputs...");
     if (outputs.begin()) {
@@ -73,7 +116,7 @@ void setup() {
     }
 
     // ===================================================================
-    // STEP 5: Initialize Digital Inputs
+    // STEP 8: Initialize Digital Inputs
     // Note: Will wait additional 50ms before reading to avoid glitches
     // ===================================================================
     Serial.println("Initializing digital inputs...");
@@ -82,51 +125,79 @@ void setup() {
     Serial.println("✓ Digital inputs configured\n");
 
     // ===================================================================
-    // STEP 6: Initialize Device Identification (LED + Buzzer)
+    // STEP 9: Initialize Device Identification (LED + Buzzer)
     // ===================================================================
     Serial.println("Initializing device identification...");
     deviceID.begin();
     Serial.println("✓ Device identification ready\n");
 
     // ===================================================================
-    // STEP 7: Display PSRAM Info
+    // STEP 10: Display PSRAM Info
     // ===================================================================
     Serial.printf("PSRAM Size: %d bytes\n", ESP.getPsramSize());
     Serial.printf("Free PSRAM: %d bytes\n\n", ESP.getFreePsram());
 
     // ===================================================================
-    // STEP 8: Initialize Ethernet
-    // Includes proper W5500 reset sequence accounting for glitches
+    // STEP 11: Initialize Network (WiFi OR Ethernet)
+    // Unified network manager handles interface selection
     // ===================================================================
-    if (ethernet.begin()) {
-        ethernet.setConnectionCallback(onEthernetConnection);
+    Serial.println("Initializing network...");
+    if (networkManager.begin(deviceMAC)) {
+        networkManager.setConnectionCallback(onNetworkConnection);
 
-        // Wait for Ethernet connection (30 second timeout)
-        Serial.println("Waiting for Ethernet connection (30s timeout)...");
+        // Wait for connection (30 second timeout)
+        Serial.println("Waiting for network connection (30s timeout)...");
         unsigned long timeout = millis() + 30000;
-        while (!ethernet.isConnected() && millis() < timeout) {
+        while (!networkManager.isConnected() && millis() < timeout) {
             delay(100);
-            ethernet.update();
+            networkManager.update();
+            bootButton.update();  // Continue monitoring boot button
         }
 
-        if (ethernet.isConnected()) {
-            Serial.println("✓ Ethernet connected!\n");
+        if (networkManager.isConnected()) {
+            Serial.println("✓ Network connected!");
+            Serial.printf("   Interface: %s\n",
+                         networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI ? "WiFi" : "Ethernet");
+            Serial.printf("   IP Address: %s\n", networkManager.getIP().toString().c_str());
+
+            if (networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI) {
+                Serial.printf("   RSSI: %d dBm\n", networkManager.getRSSI());
+
+                // Check if in AP mode
+                WiFiManager* wifi = networkManager.getWiFiManager();
+                if (wifi && wifi->getMode() == WiFiManager::MODE_AP) {
+                    Serial.println("   MODE: Access Point (setup mode)");
+                    Serial.println("   Connect to device's WiFi network to configure");
+                }
+            }
+            Serial.println();
         } else {
-            Serial.println("✗ Ethernet connection timeout\n");
+            Serial.println("✗ Network connection timeout");
+
+            // If WiFi mode, check if in AP mode
+            if (deviceConfig.getConnectionMode() == MODE_WIFI) {
+                WiFiManager* wifi = networkManager.getWiFiManager();
+                if (wifi && wifi->getMode() == WiFiManager::MODE_AP) {
+                    Serial.println("✓ Access Point mode active");
+                    Serial.printf("   AP SSID: ESP32-Setup-XXXXXX\n");
+                    Serial.printf("   AP IP: %s\n", networkManager.getIP().toString().c_str());
+                    Serial.println("   Connect to configure WiFi\n");
+                }
+            }
         }
     } else {
-        Serial.println("✗ ERROR: Ethernet initialization FAILED\n");
+        Serial.println("✗ ERROR: Network initialization FAILED\n");
     }
 
     // ===================================================================
-    // STEP 9: Initialize MQTT with Device Discovery
+    // STEP 12: Initialize MQTT with Device Discovery
     // ===================================================================
     Serial.println("Initializing MQTT client...");
     mqtt.begin(deviceMAC);  // Use MAC address as device ID
     mqtt.setCommandCallback(onMQTTCommand);
     mqtt.setFlashCallback(onFlashIdentify);
 
-    if (ethernet.isConnected()) {
+    if (networkManager.isConnected()) {
         mqtt.connect();
     }
 
@@ -147,8 +218,22 @@ void loop() {
     // Main Loop - runs continuously
     // ===================================================================
 
-    // Update Ethernet manager
-    ethernet.update();
+    // Update network manager (WiFi or Ethernet)
+    networkManager.update();
+
+    // Update boot button handler
+    bootButton.update();
+
+    // Handle long press during runtime (force AP mode)
+    if (bootButton.longPressDetected()) {
+        Serial.println("\n!!! BOOT BUTTON HELD - ENTERING AP MODE !!!");
+        deviceConfig.clearWiFiCredentials();
+        deviceConfig.save();
+
+        Serial.println("Rebooting to AP mode in 3 seconds...");
+        delay(3000);
+        ESP.restart();
+    }
 
     // Update MQTT client (handles reconnection)
     mqtt.update();
@@ -173,7 +258,7 @@ void loop() {
             mqtt.publishStatus(
                 inputs.getAllInputs(),
                 outputs.getAllOutputs(),
-                ethernet.isConnected()
+                networkManager.isConnected()
             );
         }
     }
@@ -224,19 +309,32 @@ String getMACAddress() {
     return String(macStr);
 }
 
-void onEthernetConnection(bool connected) {
+void onNetworkConnection(bool connected) {
     if (connected) {
-        Serial.println("\n✓ Ethernet connection established");
-        Serial.printf("   IP Address: %s\n", ethernet.getIP().toString().c_str());
+        Serial.println("\n✓ Network connection established");
+        Serial.printf("   Interface: %s\n",
+                     networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI ? "WiFi" : "Ethernet");
+        Serial.printf("   IP Address: %s\n", networkManager.getIP().toString().c_str());
 
-        // Connect to MQTT when Ethernet comes up
+        if (networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI) {
+            Serial.printf("   RSSI: %d dBm\n", networkManager.getRSSI());
+        }
+
+        // Connect to MQTT when network comes up
         mqtt.connect();
     } else {
-        Serial.println("\n✗ Ethernet connection lost");
+        Serial.println("\n✗ Network connection lost");
 
-        // Disconnect MQTT when Ethernet goes down
+        // Disconnect MQTT when network goes down
         mqtt.disconnect();
     }
+}
+
+void onBootButtonLongPress(uint32_t duration) {
+    Serial.printf("\n=== BOOT BUTTON LONG PRESS DETECTED (%lu ms) ===\n", duration);
+    Serial.println("AP mode reset will be triggered");
+
+    // Visual/audio feedback will be added when integrated with DeviceIdentification
 }
 
 void onMQTTCommand(const char* command, uint8_t channel, bool state) {
@@ -252,7 +350,7 @@ void onMQTTCommand(const char* command, uint8_t channel, bool state) {
             mqtt.publishStatus(
                 inputs.getAllInputs(),
                 outputs.getAllOutputs(),
-                ethernet.isConnected()
+                networkManager.isConnected()
             );
         } else {
             Serial.printf("✗ Failed to set output CH%d\n", channel + 1);

@@ -1,6 +1,12 @@
 #include "mqtt_client.h"
 #include "config.h"
+#include "device_config.h"
+#include "network/connection_manager.h"
 #include <ETH.h>
+
+// External references
+extern DeviceConfig deviceConfig;
+extern ConnectionManager networkManager;
 
 // Static instance pointer for callback
 MQTTClientManager* MQTTClientManager::instance = nullptr;
@@ -97,24 +103,44 @@ bool MQTTClientManager::publishAnnouncement() {
         return false;
     }
 
+    const DeviceConfig::Settings& settings = deviceConfig.getSettings();
+
     // Create device announcement message
     JsonDocument doc;
     doc["device_id"] = deviceMAC;
     doc["device_type"] = DEVICE_TYPE;
     doc["firmware_version"] = FIRMWARE_VERSION;
-    doc["ip_address"] = ETH.localIP().toString();
+    doc["ip_address"] = networkManager.getIP().toString();
     doc["mac_address"] = deviceMAC;
 
+    // Capabilities
     JsonObject caps = doc["capabilities"].to<JsonObject>();
     caps["digital_inputs"] = 8;
     caps["digital_outputs"] = 8;
     caps["ethernet"] = true;
-    caps["wifi"] = false;
+    caps["wifi"] = true;  // Device now supports WiFi
 
+    // Connection information
+    JsonObject conn = doc["connection"].to<JsonObject>();
+    conn["mode"] = networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI ? "wifi" : "ethernet";
+    conn["wifi_enabled"] = settings.wifiEnabled;
+
+    if (networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI) {
+        WiFiManager* wifi = networkManager.getWiFiManager();
+        conn["wifi_ssid"] = settings.wifiSSID;
+        conn["wifi_rssi"] = networkManager.getRSSI();
+        conn["ap_mode"] = (wifi && wifi->getMode() == WiFiManager::MODE_AP);
+    }
+
+    // Status
     JsonObject status = doc["status"].to<JsonObject>();
     status["uptime_seconds"] = millis() / 1000;
     status["free_heap"] = ESP.getFreeHeap();
-    status["rssi"] = nullptr;
+    if (networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI) {
+        status["rssi"] = networkManager.getRSSI();
+    } else {
+        status["rssi"] = nullptr;
+    }
 
     doc["timestamp"] = millis();
 
@@ -132,17 +158,27 @@ bool MQTTClientManager::publishAnnouncement() {
     return success;
 }
 
-bool MQTTClientManager::publishStatus(uint8_t inputs, uint8_t outputs, bool ethConnected) {
+bool MQTTClientManager::publishStatus(uint8_t inputs, uint8_t outputs, bool networkConnected) {
     if (!mqttClient.connected()) {
         return false;
     }
+
+    const DeviceConfig::Settings& settings = deviceConfig.getSettings();
 
     // Create JSON status message
     JsonDocument doc;
     doc["device_id"] = deviceMAC;
     doc["digital_inputs"] = inputs;
     doc["digital_outputs"] = outputs;
-    doc["ethernet_connected"] = ethConnected;
+    doc["network_connected"] = networkConnected;
+    doc["connection_type"] = networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI ? "wifi" : "ethernet";
+
+    // Add WiFi-specific information
+    if (networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI) {
+        doc["wifi_rssi"] = networkManager.getRSSI();
+        doc["wifi_ssid"] = settings.wifiSSID;
+    }
+
     doc["assigned_line"] = nullptr;  // API will translate via assignment table
     doc["timestamp"] = millis();
 
@@ -255,6 +291,120 @@ void MQTTClientManager::handleCommand(const char* payload) {
     if (strcmp(command, "get_status") == 0) {
         Serial.println("Get status command - publishing current status");
         // Status will be published in main loop's next heartbeat
+        return;
+    }
+
+    // ===================================================================
+    // WiFi Configuration Commands
+    // ===================================================================
+
+    // Handle wifi_configure command
+    if (strcmp(command, "wifi_configure") == 0) {
+        const char* ssid = doc["ssid"] | "";
+        const char* password = doc["password"] | "";
+        bool enabled = doc["enabled"] | true;
+
+        Serial.printf("WiFi configure command: SSID='%s', enabled=%s\n",
+                     ssid, enabled ? "true" : "false");
+
+        if (strlen(ssid) == 0) {
+            Serial.println("ERROR: SSID is required");
+            return;
+        }
+
+        // Save credentials to config
+        if (deviceConfig.setWiFiCredentials(ssid, password)) {
+            deviceConfig.enableWiFi(enabled);
+            deviceConfig.save();
+
+            Serial.println("WiFi configuration saved. Rebooting in 3 seconds...");
+            delay(3000);
+            ESP.restart();
+        } else {
+            Serial.println("ERROR: Failed to save WiFi configuration");
+        }
+        return;
+    }
+
+    // Handle wifi_enable command
+    if (strcmp(command, "wifi_enable") == 0) {
+        bool enabled = doc["enabled"] | true;
+
+        Serial.printf("WiFi enable command: %s\n", enabled ? "enabled" : "disabled");
+
+        // Check if credentials are configured
+        const DeviceConfig::Settings& settings = deviceConfig.getSettings();
+        if (enabled && strlen(settings.wifiSSID) == 0) {
+            Serial.println("ERROR: WiFi credentials not configured");
+            return;
+        }
+
+        deviceConfig.enableWiFi(enabled);
+        deviceConfig.save();
+
+        Serial.println("WiFi mode changed. Rebooting in 3 seconds...");
+        delay(3000);
+        ESP.restart();
+        return;
+    }
+
+    // Handle wifi_disable command
+    if (strcmp(command, "wifi_disable") == 0) {
+        Serial.println("WiFi disable command - switching to Ethernet");
+
+        deviceConfig.enableWiFi(false);
+        deviceConfig.save();
+
+        Serial.println("Switching to Ethernet mode. Rebooting in 3 seconds...");
+        delay(3000);
+        ESP.restart();
+        return;
+    }
+
+    // Handle wifi_reset_ap command
+    if (strcmp(command, "wifi_reset_ap") == 0) {
+        Serial.println("WiFi reset AP command - clearing credentials");
+
+        deviceConfig.clearWiFiCredentials();
+        deviceConfig.save();
+
+        Serial.println("WiFi credentials cleared. Rebooting to AP mode in 3 seconds...");
+        delay(3000);
+        ESP.restart();
+        return;
+    }
+
+    // Handle get_wifi_status command
+    if (strcmp(command, "get_wifi_status") == 0) {
+        Serial.println("Get WiFi status command");
+
+        const DeviceConfig::Settings& settings = deviceConfig.getSettings();
+
+        JsonDocument statusDoc;
+        statusDoc["device_id"] = deviceMAC;
+        statusDoc["wifi_enabled"] = settings.wifiEnabled;
+        statusDoc["connection_mode"] = settings.connectionMode == MODE_WIFI ? "wifi" : "ethernet";
+
+        if (networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI) {
+            WiFiManager* wifi = networkManager.getWiFiManager();
+            statusDoc["wifi_connected"] = wifi && wifi->isConnected();
+            statusDoc["wifi_ssid"] = settings.wifiSSID;
+            statusDoc["wifi_rssi"] = networkManager.getRSSI();
+            statusDoc["ap_mode"] = (wifi && wifi->getMode() == WiFiManager::MODE_AP);
+        } else {
+            statusDoc["wifi_connected"] = false;
+            statusDoc["wifi_ssid"] = strlen(settings.wifiSSID) > 0 ? settings.wifiSSID : nullptr;
+            statusDoc["wifi_rssi"] = nullptr;
+            statusDoc["ap_mode"] = false;
+        }
+
+        statusDoc["ip_address"] = networkManager.getIP().toString();
+
+        char buffer[MQTT_MAX_PACKET_SIZE];
+        size_t len = serializeJson(statusDoc, buffer);
+
+        mqttClient.publish(deviceTopicStatus, buffer, len);
+        Serial.println("WiFi status published");
         return;
     }
 
