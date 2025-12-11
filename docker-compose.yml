@@ -21,17 +21,32 @@ services:
     networks:
       - production-line-network
 
-  # Eclipse Mosquitto MQTT broker
+  # RabbitMQ with MQTT Plugin
   mqtt:
-    image: eclipse-mosquitto:2
+    image: rabbitmq:3.13-management-alpine
     container_name: production-line-mqtt
     ports:
-      - "1883:1883"
-      - "9001:9001"
+      - "1883:1883"      # MQTT TCP
+      - "9001:9001"      # MQTT WebSocket
+      - "15672:15672"    # Management UI
+      - "5672:5672"      # AMQP (optional)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
     volumes:
-      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_log:/mosquitto/log
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_log:/var/log/rabbitmq
+    command: >
+      bash -c "
+      rabbitmq-plugins enable --offline rabbitmq_mqtt rabbitmq_web_mqtt rabbitmq_management &&
+      rabbitmq-server
+      "
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - production-line-network
 
@@ -111,9 +126,9 @@ services:
 volumes:
   pgdata:
     driver: local
-  mosquitto_data:
+  rabbitmq_data:
     driver: local
-  mosquitto_log:
+  rabbitmq_log:
     driver: local
 
 networks:
