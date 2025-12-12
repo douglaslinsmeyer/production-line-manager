@@ -32,6 +32,20 @@ void DeviceConfig::loadSettings() {
     prefs.getString("wifi_pass", settings.wifiPassword, sizeof(settings.wifiPassword));
     settings.wifiAPMode = prefs.getBool("wifi_ap", false);
 
+    // Load mDNS settings with defaults
+    settings.mdnsEnabled = prefs.getBool("mdns_en", true);  // Enabled by default
+    prefs.getString("mdns_svc", settings.mdnsServiceName, sizeof(settings.mdnsServiceName));
+    if (strlen(settings.mdnsServiceName) == 0) {
+        strncpy(settings.mdnsServiceName, "_mqtt", sizeof(settings.mdnsServiceName) - 1);
+    }
+    prefs.getString("mdns_proto", settings.mdnsProtocol, sizeof(settings.mdnsProtocol));
+    if (strlen(settings.mdnsProtocol) == 0) {
+        strncpy(settings.mdnsProtocol, "_tcp", sizeof(settings.mdnsProtocol) - 1);
+    }
+    settings.mdnsTimeoutMs = prefs.getUShort("mdns_tmout", 5000);
+    settings.mdnsCacheEnabled = prefs.getBool("mdns_cache", true);
+    settings.mdnsCacheExpiryMs = prefs.getULong("mdns_exp", 3600000);  // 1 hour
+
     // Apply defaults if empty
     if (strlen(settings.deviceID) == 0) {
         loadDefaults();
@@ -50,6 +64,14 @@ void DeviceConfig::loadDefaults() {
     settings.wifiAPMode = false;
     memset(settings.wifiSSID, 0, sizeof(settings.wifiSSID));
     memset(settings.wifiPassword, 0, sizeof(settings.wifiPassword));
+
+    // mDNS defaults
+    settings.mdnsEnabled = true;  // Enabled by default
+    strncpy(settings.mdnsServiceName, "_mqtt", sizeof(settings.mdnsServiceName) - 1);
+    strncpy(settings.mdnsProtocol, "_tcp", sizeof(settings.mdnsProtocol) - 1);
+    settings.mdnsTimeoutMs = 5000;
+    settings.mdnsCacheEnabled = true;
+    settings.mdnsCacheExpiryMs = 3600000;  // 1 hour
 }
 
 bool DeviceConfig::save() {
@@ -71,6 +93,14 @@ bool DeviceConfig::save() {
     prefs.putString("wifi_ssid", settings.wifiSSID);
     prefs.putString("wifi_pass", settings.wifiPassword);
     prefs.putBool("wifi_ap", settings.wifiAPMode);
+
+    // Save mDNS settings
+    prefs.putBool("mdns_en", settings.mdnsEnabled);
+    prefs.putString("mdns_svc", settings.mdnsServiceName);
+    prefs.putString("mdns_proto", settings.mdnsProtocol);
+    prefs.putUShort("mdns_tmout", settings.mdnsTimeoutMs);
+    prefs.putBool("mdns_cache", settings.mdnsCacheEnabled);
+    prefs.putULong("mdns_exp", settings.mdnsCacheExpiryMs);
 
     return true;
 }
@@ -195,6 +225,28 @@ ConnectionMode DeviceConfig::getConnectionMode() const {
     return settings.connectionMode;
 }
 
+bool DeviceConfig::setMDNSDiscovery(bool enabled, const char* serviceName,
+                                     const char* protocol, uint16_t timeoutMs) {
+    settings.mdnsEnabled = enabled;
+
+    if (serviceName && strlen(serviceName) > 0) {
+        strncpy(settings.mdnsServiceName, serviceName, sizeof(settings.mdnsServiceName) - 1);
+        settings.mdnsServiceName[sizeof(settings.mdnsServiceName) - 1] = '\0';
+    }
+
+    if (protocol && strlen(protocol) > 0) {
+        strncpy(settings.mdnsProtocol, protocol, sizeof(settings.mdnsProtocol) - 1);
+        settings.mdnsProtocol[sizeof(settings.mdnsProtocol) - 1] = '\0';
+    }
+
+    if (timeoutMs > 0) {
+        settings.mdnsTimeoutMs = timeoutMs;
+    }
+
+    Serial.printf("mDNS discovery %s\n", enabled ? "enabled" : "disabled");
+    return save();
+}
+
 void DeviceConfig::resetToDefaults() {
     prefs.clear();
     loadDefaults();
@@ -223,6 +275,15 @@ void DeviceConfig::printSettings() {
     Serial.printf("WiFi SSID:       %s\n", strlen(settings.wifiSSID) > 0 ? settings.wifiSSID : "(not configured)");
     Serial.printf("WiFi Password:   %s\n", strlen(settings.wifiPassword) > 0 ? "****" : "(not set)");
     Serial.printf("AP Mode:         %s\n", settings.wifiAPMode ? "Yes" : "No");
+
+    // mDNS settings
+    Serial.println("\n--- mDNS Discovery ---");
+    Serial.printf("mDNS Enabled:    %s\n", settings.mdnsEnabled ? "Yes" : "No");
+    Serial.printf("Service Name:    %s\n", settings.mdnsServiceName);
+    Serial.printf("Protocol:        %s\n", settings.mdnsProtocol);
+    Serial.printf("Timeout:         %u ms\n", settings.mdnsTimeoutMs);
+    Serial.printf("Cache Enabled:   %s\n", settings.mdnsCacheEnabled ? "Yes" : "No");
+    Serial.printf("Cache Expiry:    %u ms (%u min)\n", settings.mdnsCacheExpiryMs, settings.mdnsCacheExpiryMs / 60000);
     Serial.println("============================\n");
 }
 

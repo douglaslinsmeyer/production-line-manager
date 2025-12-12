@@ -30,6 +30,14 @@ public:
         char wifiSSID[64];              // WiFi network name (max 32 for ESP32, but allow 64)
         char wifiPassword[64];          // WiFi password (WPA2 max 63 chars)
         bool wifiAPMode;                // Currently in AP mode?
+
+        // mDNS Discovery Configuration
+        bool mdnsEnabled;                // Enable mDNS broker discovery
+        char mdnsServiceName[32];        // mDNS service name (default: "_mqtt")
+        char mdnsProtocol[8];            // mDNS protocol (default: "_tcp")
+        uint16_t mdnsTimeoutMs;          // Discovery timeout in milliseconds
+        bool mdnsCacheEnabled;           // Cache discovered brokers
+        uint32_t mdnsCacheExpiryMs;      // Cache expiry period in milliseconds
     };
 
     DeviceConfig();
@@ -55,6 +63,10 @@ public:
     bool isWiFiEnabled() const;
     bool isWiFiAPMode() const;
     ConnectionMode getConnectionMode() const;
+
+    // mDNS configuration methods
+    bool setMDNSDiscovery(bool enabled, const char* serviceName = "_mqtt",
+                          const char* protocol = "_tcp", uint16_t timeoutMs = 5000);
 
     // Reset to factory defaults
     void resetToDefaults();

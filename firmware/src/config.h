@@ -70,5 +70,19 @@
 // MQTT Buffer Configuration
 #define MQTT_MAX_PACKET_SIZE 512          // Maximum MQTT packet size
 
+// mDNS Configuration
+#define MDNS_ENABLED true                 // Enabled by default
+#define MDNS_SERVICE_NAME "_mqtt"         // Standard MQTT service name
+#define MDNS_PROTOCOL "_tcp"              // TCP protocol
+#define MDNS_DISCOVERY_TIMEOUT 5000       // 5 second discovery timeout
+#define MDNS_CACHE_ENABLED true           // Cache discovered brokers
+#define MDNS_CACHE_EXPIRY 3600000         // 1 hour cache validity (milliseconds)
+
+// Display Configuration
+#define DISPLAY_I2C_ADDRESS 0x3C          // SSD1306 I2C address (0x3C or 0x3D)
+#define DISPLAY_WIDTH 128                 // OLED display width in pixels
+#define DISPLAY_HEIGHT 64                 // OLED display height in pixels
+#define DISPLAY_REFRESH_INTERVAL 2000     // Display refresh interval (2s)
+
 // Hardware Configuration (from platformio.ini build_flags)
 // Pin definitions are in build_flags - no need to redefine here

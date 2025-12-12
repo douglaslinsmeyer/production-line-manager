@@ -5,6 +5,7 @@
 #include <WiFiClient.h>
 #include <ArduinoJson.h>
 #include "state/line_state.h"
+#include "network/mdns_discovery.h"
 
 // Forward declaration
 class ConnectionManager;
@@ -54,6 +55,7 @@ private:
     ConnectionManager* networkManagerPtr;
     unsigned long lastReconnectAttempt;
     unsigned long reconnectInterval;
+    MDNSDiscovery* mdnsDiscovery;  // mDNS discovery handler
 
     char deviceMAC[18];  // MAC address in format "XX:XX:XX:XX:XX:XX"
     char deviceTopicCommand[64];  // devices/{MAC}/command

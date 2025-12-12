@@ -9,6 +9,7 @@
 #include "gpio/button_led.h"
 #include "gpio/tower_light.h"
 #include "gpio/status_led.h"
+#include "display/display_manager.h"
 #include "mqtt/mqtt_client.h"
 #include "identification.h"
 #include "state/line_state.h"
@@ -25,6 +26,7 @@ ControlButton controlButton;
 ButtonLED buttonLED(&outputs);
 TowerLightManager towerLight(&outputs);
 StatusLEDController statusLED(&outputs);
+DisplayManager displayManager;
 
 // Device identification (MAC address)
 char deviceMAC[18];  // Format: "XX:XX:XX:XX:XX:XX"
@@ -135,6 +137,18 @@ void setup() {
         Serial.println("✓ Digital outputs ready (all OFF)\n");
     } else {
         Serial.println("✗ ERROR: Digital outputs initialization FAILED\n");
+    }
+
+    // ===================================================================
+    // STEP 7a: Initialize Display (uses same I2C bus as TCA9554PWR)
+    // ===================================================================
+    Serial.println("Initializing OLED display...");
+    if (displayManager.begin()) {
+        Serial.println("✓ Display ready\n");
+        displayManager.showMessage("Booting...");
+    } else {
+        Serial.println("✗ WARNING: Display initialization failed");
+        Serial.println("  System will continue without display\n");
     }
 
     // ===================================================================
@@ -265,6 +279,10 @@ void setup() {
     mqtt.setFlashCallback(onFlashIdentify);
     mqtt.setNetworkManager(&networkManager);  // Give MQTT access to network state
 
+    // Give display access to network and MQTT state
+    displayManager.setNetworkManager(&networkManager);
+    displayManager.setMQTTManager(&mqtt);
+
     if (networkManager.isConnected()) {
         mqtt.connect();
     }
@@ -300,6 +318,9 @@ void loop() {
 
     // Update status LED (network/MQTT indicator patterns)
     statusLED.update();
+
+    // Update display (network/MQTT status)
+    displayManager.update();
 
     // Update boot button handler
     bootButton.update();
@@ -436,6 +457,9 @@ void onNetworkConnection(bool connected) {
 
         // Connect to MQTT when network comes up
         mqtt.connect();
+
+        // Force display refresh on network connection
+        displayManager.forceRefresh();
     } else {
         Serial.println("\n✗ Network connection lost");
 
@@ -448,6 +472,9 @@ void onNetworkConnection(bool connected) {
 
         // Disconnect MQTT when network goes down
         mqtt.disconnect();
+
+        // Force display refresh on network disconnection
+        displayManager.forceRefresh();
     }
 }
 

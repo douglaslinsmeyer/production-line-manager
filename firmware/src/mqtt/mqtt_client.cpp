@@ -17,7 +17,8 @@ MQTTClientManager::MQTTClientManager()
       flashCallback(nullptr),
       networkManagerPtr(nullptr),
       lastReconnectAttempt(0),
-      reconnectInterval(5000) {
+      reconnectInterval(5000),
+      mdnsDiscovery(nullptr) {
 
     instance = this;
     deviceMAC[0] = '\0';
@@ -36,15 +37,79 @@ void MQTTClientManager::begin(const char* macAddress) {
 
     // Get broker configuration from device settings
     const DeviceConfig::Settings& settings = deviceConfig.getSettings();
-    const char* broker = (strlen(settings.mqttBroker) > 0) ? settings.mqttBroker : MQTT_BROKER;
-    uint16_t port = (settings.mqttPort > 0) ? settings.mqttPort : MQTT_PORT;
+    const char* broker = nullptr;
+    uint16_t port = MQTT_PORT;
+
+    // === mDNS DISCOVERY ===
+    if (settings.mdnsEnabled) {
+        Serial.println("mDNS discovery enabled");
+
+        // Lazy initialization of mDNS discovery
+        if (!mdnsDiscovery) {
+            mdnsDiscovery = new MDNSDiscovery();
+            mdnsDiscovery->begin(deviceMAC);
+        }
+
+        // Try cache first (fast path)
+        IPAddress cachedIP;
+        uint16_t cachedPort;
+        if (settings.mdnsCacheEnabled &&
+            mdnsDiscovery->getCachedBroker(cachedIP, cachedPort)) {
+            // Use cached broker
+            static String cachedIPStr;
+            cachedIPStr = cachedIP.toString();
+            broker = cachedIPStr.c_str();
+            port = cachedPort;
+            Serial.printf("Using cached broker: %s:%d\n", broker, port);
+        } else {
+            // Perform live discovery
+            Serial.println("Performing mDNS discovery...");
+            MDNSDiscovery::DiscoveryConfig config;
+            config.enabled = true;
+            config.timeoutMs = settings.mdnsTimeoutMs;
+            config.cacheResults = settings.mdnsCacheEnabled;
+            config.cacheExpiryMs = settings.mdnsCacheExpiryMs;
+            strncpy(config.serviceName, settings.mdnsServiceName, sizeof(config.serviceName) - 1);
+            config.serviceName[sizeof(config.serviceName) - 1] = '\0';
+            strncpy(config.protocol, settings.mdnsProtocol, sizeof(config.protocol) - 1);
+            config.protocol[sizeof(config.protocol) - 1] = '\0';
+
+            auto discovered = mdnsDiscovery->discoverBroker(config);
+
+            if (discovered.valid) {
+                // Use discovered broker
+                static String discoveredIPStr;
+                discoveredIPStr = discovered.ip.toString();
+                broker = discoveredIPStr.c_str();
+                port = discovered.port;
+                Serial.printf("✓ Discovered broker: %s (%s:%d)\n",
+                             discovered.hostname, broker, port);
+
+                // Cache for future use
+                if (settings.mdnsCacheEnabled) {
+                    mdnsDiscovery->cacheBroker(discovered.ip, discovered.port);
+                }
+            } else {
+                Serial.println("✗ mDNS discovery failed - falling back to configured broker");
+            }
+        }
+    }
+
+    // === FALLBACK CHAIN ===
+    // If mDNS didn't find anything, use configured or default broker
+    if (broker == nullptr) {
+        broker = (strlen(settings.mqttBroker) > 0) ? settings.mqttBroker : MQTT_BROKER;
+        port = (settings.mqttPort > 0) ? settings.mqttPort : MQTT_PORT;
+        Serial.printf("Using configured broker: %s:%d\n", broker, port);
+    }
 
     mqttClient.setServer(broker, port);
     mqttClient.setCallback(onMessage);
     mqttClient.setBufferSize(MQTT_MAX_PACKET_SIZE);
 
-    Serial.printf("MQTT configured:\n");
+    Serial.printf("\nMQTT configured:\n");
     Serial.printf("  Broker: %s:%d\n", broker, port);
+    Serial.printf("  mDNS: %s\n", settings.mdnsEnabled ? "Enabled" : "Disabled");
     Serial.printf("  Device ID (MAC): %s\n", deviceMAC);
     Serial.printf("  Command topic: %s\n", deviceTopicCommand);
     Serial.printf("  Status topic: %s\n", deviceTopicStatus);
