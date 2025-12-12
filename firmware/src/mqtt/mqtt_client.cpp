@@ -14,7 +14,6 @@ MQTTClientManager* MQTTClientManager::instance = nullptr;
 
 MQTTClientManager::MQTTClientManager()
     : mqttClient(ethClient),
-      cmdCallback(nullptr),
       flashCallback(nullptr),
       networkManagerPtr(nullptr),
       lastReconnectAttempt(0),
@@ -253,10 +252,6 @@ bool MQTTClientManager::publishInputChange(uint8_t channel, bool state, uint8_t 
     }
 
     return success;
-}
-
-void MQTTClientManager::setCommandCallback(MQTTCommandCallback callback) {
-    cmdCallback = callback;
 }
 
 void MQTTClientManager::setFlashCallback(MQTTFlashCallback callback) {

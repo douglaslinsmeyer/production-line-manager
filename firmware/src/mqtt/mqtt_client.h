@@ -10,7 +10,6 @@
 class ConnectionManager;
 
 // Callback function type for MQTT commands
-typedef void (*MQTTCommandCallback)(const char* command, uint8_t channel, bool state);
 typedef void (*MQTTFlashCallback)();
 
 // MQTT Client Manager
@@ -42,9 +41,6 @@ public:
     // Publish input change event
     bool publishInputChange(uint8_t channel, bool state, uint8_t allInputs);
 
-    // Set command callback
-    void setCommandCallback(MQTTCommandCallback callback);
-
     // Set flash identification callback
     void setFlashCallback(MQTTFlashCallback callback);
 
@@ -54,7 +50,6 @@ public:
 private:
     WiFiClient ethClient;
     PubSubClient mqttClient;
-    MQTTCommandCallback cmdCallback;
     MQTTFlashCallback flashCallback;
     ConnectionManager* networkManagerPtr;
     unsigned long lastReconnectAttempt;

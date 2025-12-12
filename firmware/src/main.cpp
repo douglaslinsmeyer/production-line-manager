@@ -33,7 +33,6 @@ unsigned long lastAnnouncement = 0;
 
 void onInputChange(uint8_t channel, bool state);
 void onNetworkConnection(bool connected);
-void onMQTTCommand(const char* command, uint8_t channel, bool state);
 void onFlashIdentify();
 void onBootButtonLongPress(uint32_t duration);
 void onLineStateChange(LineState oldState, LineState newState);
@@ -254,7 +253,6 @@ void setup() {
     // ===================================================================
     Serial.println("Initializing MQTT client...");
     mqtt.begin(deviceMAC);  // Use MAC address as device ID
-    mqtt.setCommandCallback(onMQTTCommand);
     mqtt.setFlashCallback(onFlashIdentify);
     mqtt.setNetworkManager(&networkManager);  // Give MQTT access to network state
 
@@ -435,39 +433,6 @@ void onBootButtonLongPress(uint32_t duration) {
     Serial.println("AP mode reset will be triggered");
 
     // Visual/audio feedback will be added when integrated with DeviceIdentification
-}
-
-void onMQTTCommand(const char* command, uint8_t channel, bool state) {
-    Serial.printf("Executing command: %s (CH%d=%s)\n",
-                 command, channel + 1, state ? "ON" : "OFF");
-
-    // Handle set_output command
-    if (strcmp(command, "set_output") == 0) {
-        // Block tower light channels from manual control
-        if (TowerLightManager::isTowerLightChannel(channel)) {
-            Serial.printf("✗ Channel %d is reserved for tower lights (automatic control only)\n",
-                         channel + 1);
-            return;
-        }
-
-        if (outputs.setOutput(channel, state)) {
-            Serial.printf("✓ Output CH%d set to %s\n", channel + 1, state ? "ON" : "OFF");
-
-            // Publish updated status
-            mqtt.publishStatus(
-                inputs.getAllInputs(),
-                outputs.getAllOutputs(),
-                networkManager.isConnected(),
-                lineState.getState()
-            );
-        } else {
-            Serial.printf("✗ Failed to set output CH%d\n", channel + 1);
-        }
-    }
-    // Add more commands here as needed
-    else {
-        Serial.printf("Unknown command: %s\n", command);
-    }
 }
 
 void onLineStateChange(LineState oldState, LineState newState) {
