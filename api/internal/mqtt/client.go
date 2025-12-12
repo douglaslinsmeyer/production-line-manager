@@ -2,19 +2,27 @@ package mqtt
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"go.uber.org/zap"
 )
 
+// SubscriptionManager interface allows re-subscribing to topics on reconnect
+type SubscriptionManager interface {
+	ResubscribeAll() error
+}
+
 // Client wraps the MQTT client with connection management
 type Client struct {
-	client   mqtt.Client
-	logger   *zap.Logger
-	qos      byte
-	brokerURL string
-	clientID  string
+	client       mqtt.Client
+	logger       *zap.Logger
+	qos          byte
+	brokerURL    string
+	clientID     string
+	subManager   SubscriptionManager
+	subManagerMu sync.RWMutex
 }
 
 // Config holds MQTT client configuration
@@ -52,6 +60,19 @@ func NewClient(cfg *Config, logger *zap.Logger) (*Client, error) {
 			logger.Info("mqtt connected",
 				zap.String("broker", cfg.BrokerURL),
 				zap.String("client_id", cfg.ClientID))
+
+			// Trigger re-subscription on connect/reconnect
+			c.subManagerMu.RLock()
+			sm := c.subManager
+			c.subManagerMu.RUnlock()
+
+			if sm != nil {
+				logger.Info("re-subscribing to mqtt topics after connection")
+				if err := sm.ResubscribeAll(); err != nil {
+					logger.Error("failed to re-subscribe after connection",
+						zap.Error(err))
+				}
+			}
 		}).
 		SetConnectionLostHandler(func(client mqtt.Client, err error) {
 			logger.Warn("mqtt connection lost",
@@ -115,6 +136,13 @@ func (c *Client) Subscribe(topic string, handler mqtt.MessageHandler) error {
 // IsConnected returns true if the client is connected
 func (c *Client) IsConnected() bool {
 	return c.client.IsConnected()
+}
+
+// SetSubscriptionManager registers a subscription manager for automatic re-subscription on reconnect
+func (c *Client) SetSubscriptionManager(sm SubscriptionManager) {
+	c.subManagerMu.Lock()
+	defer c.subManagerMu.Unlock()
+	c.subManager = sm
 }
 
 // Disconnect disconnects the MQTT client

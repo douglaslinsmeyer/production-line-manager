@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"go.uber.org/zap"
@@ -14,10 +15,18 @@ import (
 
 // Subscriber subscribes to MQTT command topics and processes them
 type Subscriber struct {
-	client               *Client
-	lineService          *service.LineService
+	client                 *Client
+	lineService            *service.LineService
 	deviceDiscoveryHandler *DeviceDiscoveryHandler
-	logger               *zap.Logger
+	logger                 *zap.Logger
+	subscriptions          []subscription
+	subMu                  sync.RWMutex
+}
+
+// subscription represents a single MQTT topic subscription
+type subscription struct {
+	topic   string
+	handler mqtt.MessageHandler
 }
 
 // NewSubscriber creates a new MQTT subscriber
@@ -35,38 +44,74 @@ func NewSubscriber(
 	}
 }
 
+// subscribeToTopics performs all MQTT subscriptions
+func (s *Subscriber) subscribeToTopics() error {
+	s.subMu.RLock()
+	subs := s.subscriptions
+	s.subMu.RUnlock()
+
+	var errors []error
+	for _, sub := range subs {
+		if err := s.client.Subscribe(sub.topic, sub.handler); err != nil {
+			s.logger.Error("failed to subscribe to topic",
+				zap.String("topic", sub.topic),
+				zap.Error(err))
+			errors = append(errors, err)
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to subscribe to %d topic(s)", len(errors))
+	}
+
+	s.logger.Info("successfully subscribed to all mqtt topics",
+		zap.Int("topic_count", len(subs)))
+	return nil
+}
+
+// ResubscribeAll re-subscribes to all configured topics (called on reconnect)
+func (s *Subscriber) ResubscribeAll() error {
+	s.logger.Info("re-subscribing to mqtt topics")
+	return s.subscribeToTopics()
+}
+
 // Start starts subscribing to command topics
 func (s *Subscriber) Start() error {
-	// Subscribe to legacy production line status commands
-	if err := s.client.Subscribe(TopicCommandStatus, s.handleStatusCommand); err != nil {
-		return fmt.Errorf("failed to subscribe to status commands: %w", err)
+	// Register all subscriptions
+	s.subMu.Lock()
+	s.subscriptions = []subscription{
+		{
+			topic:   TopicCommandStatus,
+			handler: s.handleStatusCommand,
+		},
+		{
+			topic:   "devices/announce",
+			handler: s.deviceDiscoveryHandler.HandleAnnouncement,
+		},
+		{
+			topic:   "devices/+/status",
+			handler: s.deviceDiscoveryHandler.HandleDeviceStatus,
+		},
+		{
+			topic:   "devices/+/input-change",
+			handler: s.deviceDiscoveryHandler.HandleInputChange,
+		},
 	}
+	s.subMu.Unlock()
 
-	// Subscribe to device announcements
-	if err := s.client.Subscribe("devices/announce", s.deviceDiscoveryHandler.HandleAnnouncement); err != nil {
-		return fmt.Errorf("failed to subscribe to device announcements: %w", err)
-	}
+	// Register this subscriber with the client for reconnection handling
+	s.client.SetSubscriptionManager(s)
 
-	// Subscribe to all device status updates (wildcard)
-	if err := s.client.Subscribe("devices/+/status", s.deviceDiscoveryHandler.HandleDeviceStatus); err != nil {
-		return fmt.Errorf("failed to subscribe to device status: %w", err)
-	}
-
-	// Subscribe to all device input changes (wildcard)
-	if err := s.client.Subscribe("devices/+/input-change", s.deviceDiscoveryHandler.HandleInputChange); err != nil {
-		return fmt.Errorf("failed to subscribe to device input changes: %w", err)
+	// Perform initial subscription
+	if err := s.subscribeToTopics(); err != nil {
+		return fmt.Errorf("failed to subscribe to topics: %w", err)
 	}
 
 	// Start stale device monitor
 	s.deviceDiscoveryHandler.StartStaleDeviceMonitor()
 
 	s.logger.Info("mqtt subscriber started",
-		zap.Strings("topics", []string{
-			TopicCommandStatus,
-			"devices/announce",
-			"devices/+/status",
-			"devices/+/input-change",
-		}))
+		zap.Int("topic_count", len(s.subscriptions)))
 
 	return nil
 }
