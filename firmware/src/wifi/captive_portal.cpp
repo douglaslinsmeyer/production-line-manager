@@ -1,10 +1,12 @@
 #include "captive_portal.h"
+#include "../device_config.h"
 
 const IPAddress CaptivePortal::AP_IP(192, 168, 4, 1);
 
 CaptivePortal::CaptivePortal()
     : webServer(nullptr),
       dnsServer(nullptr),
+      deviceConfig(nullptr),
       credentialsSet(false),
       savedCallback(nullptr) {
 }
@@ -74,6 +76,10 @@ void CaptivePortal::setCredentialsSavedCallback(CredentialsSavedCallback callbac
     savedCallback = callback;
 }
 
+void CaptivePortal::setDeviceConfig(DeviceConfig* config) {
+    deviceConfig = config;
+}
+
 void CaptivePortal::handleRoot() {
     Serial.println("HTTP: GET /");
     webServer->send(200, "text/html", generateSetupPage());
@@ -105,43 +111,69 @@ void CaptivePortal::handleSave() {
     Serial.println("HTTP: POST /save");
 
     // Get SSID and password from POST parameters
-    if (webServer->hasArg("ssid") && webServer->hasArg("password")) {
-        submittedSSID = webServer->arg("ssid");
-        submittedPassword = webServer->arg("password");
-
-        // Validate SSID
-        if (submittedSSID.length() == 0 || submittedSSID.length() > 32) {
-            webServer->send(400, "application/json",
-                           "{\"success\":false,\"message\":\"SSID must be 1-32 characters\"}");
-            return;
-        }
-
-        // Validate password (0 for open, or 8-63 for WPA2)
-        if (submittedPassword.length() != 0 &&
-            (submittedPassword.length() < 8 || submittedPassword.length() > 63)) {
-            webServer->send(400, "application/json",
-                           "{\"success\":false,\"message\":\"Password must be 0 (open) or 8-63 characters\"}");
-            return;
-        }
-
-        credentialsSet = true;
-
-        Serial.printf("Credentials received: SSID='%s', Password='%s'\n",
-                     submittedSSID.c_str(),
-                     submittedPassword.length() > 0 ? "****" : "(none)");
-
-        // Trigger callback
-        if (savedCallback) {
-            savedCallback(submittedSSID.c_str(), submittedPassword.c_str());
-        }
-
-        // Send success response
-        webServer->send(200, "application/json",
-                       "{\"success\":true,\"message\":\"Configuration saved. Device will reboot in 3 seconds...\"}");
-    } else {
+    if (!webServer->hasArg("ssid") || !webServer->hasArg("password")) {
         webServer->send(400, "application/json",
                        "{\"success\":false,\"message\":\"Missing SSID or password\"}");
+        return;
     }
+
+    String ssid = webServer->arg("ssid");
+    String password = webServer->arg("password");
+
+    // Validate SSID
+    if (ssid.length() == 0 || ssid.length() > 32) {
+        webServer->send(400, "application/json",
+                       "{\"success\":false,\"message\":\"SSID must be 1-32 characters\"}");
+        return;
+    }
+
+    // Validate password (0 for open, or 8-63 for WPA2)
+    if (password.length() != 0 &&
+        (password.length() < 8 || password.length() > 63)) {
+        webServer->send(400, "application/json",
+                       "{\"success\":false,\"message\":\"Password must be 0 (open) or 8-63 characters\"}");
+        return;
+    }
+
+    Serial.printf("Credentials received: SSID='%s', Password='%s'\n",
+                 ssid.c_str(),
+                 password.length() > 0 ? "****" : "(none)");
+
+    // IMPORTANT: Save credentials to NVS before rebooting
+    if (deviceConfig) {
+        bool saved = deviceConfig->setWiFiCredentials(ssid.c_str(), password.c_str());
+        if (!saved) {
+            webServer->send(500, "application/json",
+                           "{\"success\":false,\"message\":\"Failed to save credentials to NVS\"}");
+            return;
+        }
+        deviceConfig->save();  // Ensure persisted
+        Serial.println("✓ WiFi credentials saved to NVS");
+    } else {
+        Serial.println("⚠ Warning: deviceConfig not set, credentials not saved!");
+    }
+
+    // Set internal state for callback compatibility
+    submittedSSID = ssid;
+    submittedPassword = password;
+    credentialsSet = true;
+
+    // Trigger callback if set (for backward compatibility)
+    if (savedCallback) {
+        savedCallback(ssid.c_str(), password.c_str());
+    }
+
+    // Send success response
+    webServer->send(200, "application/json",
+                   "{\"success\":true,\"message\":\"Configuration saved. Device will reboot in 3 seconds...\"}");
+
+    // CRITICAL: Allow HTTP response to complete, then reboot
+    delay(100);  // Brief delay for response transmission
+
+    Serial.println("Rebooting to apply WiFi configuration...");
+    delay(500);  // Additional delay for serial output
+
+    ESP.restart();  // Actually reboot the device
 }
 
 void CaptivePortal::handleNotFound() {

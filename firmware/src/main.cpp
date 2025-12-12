@@ -95,6 +95,16 @@ void setup() {
     deviceConfig.begin();
     deviceConfig.printSettings();
 
+    // Auto-switch to WiFi mode if AP mode flag is set
+    // (AP mode is a WiFi feature and incompatible with Ethernet mode)
+    if (deviceConfig.isWiFiAPMode() && deviceConfig.getConnectionMode() == MODE_ETHERNET) {
+        Serial.println("\n⚠ AP mode flag detected with Ethernet mode");
+        Serial.println("  Auto-switching to WiFi mode...");
+        deviceConfig.enableWiFi(true);  // This sets connection mode to WiFi
+        deviceConfig.save();
+        Serial.println("✓ Connection mode changed to WiFi\n");
+    }
+
     // ===================================================================
     // STEP 6: Initialize I2C for TCA9554PWR
     // Note: GPIO41/42 are JTAG pins - hardware JTAG will be disabled
@@ -168,6 +178,9 @@ void setup() {
                 if (wifi && wifi->getMode() == WiFiManager::MODE_AP) {
                     Serial.println("   MODE: Access Point (setup mode)");
                     Serial.println("   Connect to device's WiFi network to configure");
+
+                    // Start AP mode LED indicator
+                    deviceID.setLEDPattern(DeviceIdentification::LED_PATTERN_AP_MODE);
                 }
             }
             Serial.println();
@@ -182,6 +195,9 @@ void setup() {
                     Serial.printf("   AP SSID: ESP32-Setup-XXXXXX\n");
                     Serial.printf("   AP IP: %s\n", networkManager.getIP().toString().c_str());
                     Serial.println("   Connect to configure WiFi\n");
+
+                    // Start AP mode LED indicator
+                    deviceID.setLEDPattern(DeviceIdentification::LED_PATTERN_AP_MODE);
                 }
             }
         }
@@ -196,6 +212,7 @@ void setup() {
     mqtt.begin(deviceMAC);  // Use MAC address as device ID
     mqtt.setCommandCallback(onMQTTCommand);
     mqtt.setFlashCallback(onFlashIdentify);
+    mqtt.setNetworkManager(&networkManager);  // Give MQTT access to network state
 
     if (networkManager.isConnected()) {
         mqtt.connect();
@@ -220,6 +237,9 @@ void loop() {
 
     // Update network manager (WiFi or Ethernet)
     networkManager.update();
+
+    // Update device identification (LED patterns)
+    deviceID.update();
 
     // Update boot button handler
     bootButton.update();
@@ -318,12 +338,30 @@ void onNetworkConnection(bool connected) {
 
         if (networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI) {
             Serial.printf("   RSSI: %d dBm\n", networkManager.getRSSI());
+
+            // Check if in AP mode and set LED accordingly
+            if (networkManager.isInAPMode()) {
+                deviceID.setLEDPattern(DeviceIdentification::LED_PATTERN_AP_MODE);
+            } else {
+                // Connected to WiFi network (STA mode) - turn off LED
+                deviceID.setLEDPattern(DeviceIdentification::LED_PATTERN_OFF);
+            }
+        } else {
+            // Ethernet mode - turn off LED
+            deviceID.setLEDPattern(DeviceIdentification::LED_PATTERN_OFF);
         }
 
         // Connect to MQTT when network comes up
         mqtt.connect();
     } else {
         Serial.println("\n✗ Network connection lost");
+
+        // Check if in AP mode (fallback scenario)
+        if (networkManager.isInAPMode()) {
+            deviceID.setLEDPattern(DeviceIdentification::LED_PATTERN_AP_MODE);
+        } else {
+            deviceID.setLEDPattern(DeviceIdentification::LED_PATTERN_OFF);
+        }
 
         // Disconnect MQTT when network goes down
         mqtt.disconnect();

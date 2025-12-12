@@ -94,6 +94,12 @@ public:
     DeviceWebServer* getWebServer() { return deviceWebServer; }
 
     /**
+     * Check if WiFi is in AP mode
+     * @return true if in AP mode, false otherwise
+     */
+    bool isInAPMode() const;
+
+    /**
      * Switch to different interface (requires reboot in practice)
      * This method saves configuration and reboots device
      * @param newInterface Interface to switch to

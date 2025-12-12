@@ -5,6 +5,9 @@
 #include <DNSServer.h>
 #include <WiFi.h>
 
+// Forward declaration
+class DeviceConfig;
+
 // Callback type for when credentials are saved
 typedef void (*CredentialsSavedCallback)(const char* ssid, const char* password);
 
@@ -57,9 +60,16 @@ public:
      */
     void setCredentialsSavedCallback(CredentialsSavedCallback callback);
 
+    /**
+     * Set device config reference (for NVS credential storage)
+     * @param config Device configuration manager
+     */
+    void setDeviceConfig(DeviceConfig* config);
+
 private:
     WebServer* webServer;
     DNSServer* dnsServer;
+    DeviceConfig* deviceConfig;
 
     bool credentialsSet;
     String submittedSSID;

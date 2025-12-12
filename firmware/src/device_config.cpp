@@ -199,6 +199,10 @@ bool DeviceConfig::isWiFiEnabled() const {
     return settings.wifiEnabled;
 }
 
+bool DeviceConfig::isWiFiAPMode() const {
+    return settings.wifiAPMode;
+}
+
 ConnectionMode DeviceConfig::getConnectionMode() const {
     return settings.connectionMode;
 }

@@ -5,6 +5,9 @@
 #include <WiFiClient.h>
 #include <ArduinoJson.h>
 
+// Forward declaration
+class ConnectionManager;
+
 // Callback function type for MQTT commands
 typedef void (*MQTTCommandCallback)(const char* command, uint8_t channel, bool state);
 typedef void (*MQTTFlashCallback)();
@@ -44,11 +47,15 @@ public:
     // Set flash identification callback
     void setFlashCallback(MQTTFlashCallback callback);
 
+    // Set network manager reference (for connectivity checks)
+    void setNetworkManager(ConnectionManager* manager);
+
 private:
     WiFiClient ethClient;
     PubSubClient mqttClient;
     MQTTCommandCallback cmdCallback;
     MQTTFlashCallback flashCallback;
+    ConnectionManager* networkManagerPtr;
     unsigned long lastReconnectAttempt;
     unsigned long reconnectInterval;
 

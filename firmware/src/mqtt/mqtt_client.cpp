@@ -15,6 +15,7 @@ MQTTClientManager::MQTTClientManager()
     : mqttClient(ethClient),
       cmdCallback(nullptr),
       flashCallback(nullptr),
+      networkManagerPtr(nullptr),
       lastReconnectAttempt(0),
       reconnectInterval(5000) {
 
@@ -81,7 +82,21 @@ void MQTTClientManager::disconnect() {
     }
 }
 
+void MQTTClientManager::setNetworkManager(ConnectionManager* manager) {
+    networkManagerPtr = manager;
+}
+
 void MQTTClientManager::update() {
+    // Skip MQTT operations if in AP mode (no internet connectivity)
+    if (networkManagerPtr && networkManagerPtr->isInAPMode()) {
+        return;  // Don't attempt MQTT in AP mode
+    }
+
+    // Skip if not actually connected to internet
+    if (networkManagerPtr && !networkManagerPtr->isConnected()) {
+        return;  // No network connection at all
+    }
+
     if (!mqttClient.connected()) {
         // Auto-reconnect logic
         if (millis() - lastReconnectAttempt > reconnectInterval) {

@@ -6,7 +6,7 @@
 #define FIRMWARE_VERSION "1.0.0"
 
 // MQTT Configuration
-#define MQTT_BROKER "10.221.21.100"  // Host machine IP where MQTT broker is running
+#define MQTT_BROKER "192.168.68.123"  // Host machine IP where MQTT broker is running
 #define MQTT_PORT 1883
 #define MQTT_USER ""  // No auth by default
 #define MQTT_PASSWORD ""

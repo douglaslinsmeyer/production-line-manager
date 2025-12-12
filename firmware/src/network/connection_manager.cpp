@@ -22,6 +22,7 @@ ConnectionManager::ConnectionManager()
     ethManager = new EthernetManager();
     wifiManager = new WiFiManager();
     captivePortal = new CaptivePortal();
+    captivePortal->setDeviceConfig(&deviceConfig);  // Give it access to NVS
     deviceWebServer = new DeviceWebServer();
 }
 
@@ -148,6 +149,13 @@ int ConnectionManager::getRSSI() {
         return wifiManager->getRSSI();
     }
     return 0;  // Ethernet doesn't have RSSI
+}
+
+bool ConnectionManager::isInAPMode() const {
+    if (activeInterface == INTERFACE_WIFI && wifiManager) {
+        return (wifiManager->getMode() == WiFiManager::MODE_AP);
+    }
+    return false;
 }
 
 void ConnectionManager::setConnectionCallback(void (*callback)(bool)) {

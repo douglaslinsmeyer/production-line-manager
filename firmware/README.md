@@ -18,7 +18,7 @@ PlatformIO-based firmware for Waveshare ESP32-S3-POE-ETH-8DI-8DO board with W550
 
 Edit `src/config.h` and update:
 ```cpp
-#define MQTT_BROKER "10.221.17.122"  // Your MQTT broker IP
+#define MQTT_BROKER "192.168.68.123"  // Your MQTT broker IP
 ```
 
 ### 2. Build Firmware
@@ -93,7 +93,7 @@ ETH Got IP: 192.168.1.xxx
    IP Address: 192.168.1.xxx
 
 Initializing MQTT client...
-MQTT configured: broker=10.221.17.122:1883 client_id=esp32-s3-poe-eth-001
+MQTT configured: broker=192.168.68.123:1883 client_id=esp32-s3-poe-eth-001
 Connecting to MQTT broker...
 MQTT connected!
 Subscribed to: production-lines/commands/status
@@ -162,7 +162,7 @@ Subscribed to: production-lines/commands/status
 
 ### Test Digital Outputs
 
-Use MQTTX Web Client (http://10.221.17.122:8090):
+Use MQTTX Web Client (http://192.168.68.123:8090):
 
 ```json
 // Turn ON output channel 1 (0-indexed)
@@ -205,7 +205,7 @@ You should see heartbeat messages every 30 seconds with current input/output sta
 ### MQTT Connection Fails
 - Verify MQTT broker IP in config.h
 - Check broker is running: `docker ps | grep mqtt`
-- Test broker: `mosquitto_sub -h 10.221.17.122 -t "#" -v`
+- Test broker: `mosquitto_sub -h 192.168.68.123 -t "#" -v`
 
 ## Development
 

@@ -55,6 +55,7 @@ public:
     bool clearWiFiCredentials();
     bool enableWiFi(bool enable);
     bool isWiFiEnabled() const;
+    bool isWiFiAPMode() const;
     ConnectionMode getConnectionMode() const;
 
     // Reset to factory defaults
