@@ -188,8 +188,21 @@ export default function DeviceDiscovery() {
                   </td>
 
                   {/* IP Address */}
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    {device.ip_address || '-'}
+                  <td className="px-6 py-4 text-sm">
+                    {device.ip_address ? (
+                      <a
+                        href={`http://${device.ip_address}/`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                        title={`Open device web interface at http://${device.ip_address}/`}
+                        aria-label={`Open web interface for device at ${device.ip_address}`}
+                      >
+                        {device.ip_address}
+                      </a>
+                    ) : (
+                      <span className="text-gray-900">-</span>
+                    )}
                   </td>
 
                   {/* Status */}

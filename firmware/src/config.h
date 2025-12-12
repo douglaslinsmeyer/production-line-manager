@@ -60,6 +60,9 @@
 #define TOWER_LIGHT_YELLOW_CHANNEL 1       // D02 (DOUT2) - Yellow
 #define TOWER_LIGHT_GREEN_CHANNEL  2       // D03 (DOUT3) - Green
 
+// Status LED Configuration (Network/MQTT indicator on DO4)
+#define STATUS_LED_CHANNEL 3               // D04 (DOUT4, Channel 3, 0-indexed)
+
 // Button LED Pattern Timing
 #define BUTTON_LED_MAINTENANCE_PERIOD 500  // 500ms blink for maintenance
 #define BUTTON_LED_ERROR_PERIOD 200        // 200ms fast blink for error

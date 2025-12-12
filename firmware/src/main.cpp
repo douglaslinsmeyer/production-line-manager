@@ -8,6 +8,7 @@
 #include "gpio/control_button.h"
 #include "gpio/button_led.h"
 #include "gpio/tower_light.h"
+#include "gpio/status_led.h"
 #include "mqtt/mqtt_client.h"
 #include "identification.h"
 #include "state/line_state.h"
@@ -23,6 +24,7 @@ LineStateManager lineState;
 ControlButton controlButton;
 ButtonLED buttonLED(&outputs);
 TowerLightManager towerLight(&outputs);
+StatusLEDController statusLED(&outputs);
 
 // Device identification (MAC address)
 char deviceMAC[18];  // Format: "XX:XX:XX:XX:XX:XX"
@@ -185,6 +187,13 @@ void setup() {
     Serial.println("✓ Tower lights ready\n");
 
     // ===================================================================
+    // STEP 9e: Initialize Status LED (Network/MQTT Indicator)
+    // ===================================================================
+    Serial.println("Initializing status LED...");
+    statusLED.begin();
+    Serial.println("✓ Status LED ready\n");
+
+    // ===================================================================
     // STEP 10: Display PSRAM Info
     // ===================================================================
     Serial.printf("PSRAM Size: %d bytes\n", ESP.getPsramSize());
@@ -289,6 +298,9 @@ void loop() {
     // Update button LED (pattern updates)
     buttonLED.update();
 
+    // Update status LED (network/MQTT indicator patterns)
+    statusLED.update();
+
     // Update boot button handler
     bootButton.update();
 
@@ -308,6 +320,17 @@ void loop() {
 
     // Update digital inputs (debouncing + change detection)
     inputs.update();
+
+    // Update status LED based on network and MQTT connectivity
+    if (networkManager.isInAPMode()) {
+        statusLED.setConnectionStatus(STATUS_AP_MODE);
+    } else if (networkManager.isConnected() && mqtt.isConnected()) {
+        statusLED.setConnectionStatus(STATUS_CONNECTED);
+    } else if (networkManager.isConnected()) {
+        statusLED.setConnectionStatus(STATUS_NO_MQTT);
+    } else {
+        statusLED.setConnectionStatus(STATUS_NO_NETWORK);
+    }
 
     // Periodic device announcement (every 60 seconds)
     if (millis() - lastAnnouncement > 60000) {
