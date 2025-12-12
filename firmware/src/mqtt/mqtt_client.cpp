@@ -34,12 +34,17 @@ void MQTTClientManager::begin(const char* macAddress) {
     snprintf(deviceTopicStatus, sizeof(deviceTopicStatus),
              "%s%s%s", MQTT_TOPIC_DEVICE_PREFIX, deviceMAC, MQTT_TOPIC_STATUS_SUFFIX);
 
-    mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
+    // Get broker configuration from device settings
+    const DeviceConfig::Settings& settings = deviceConfig.getSettings();
+    const char* broker = (strlen(settings.mqttBroker) > 0) ? settings.mqttBroker : MQTT_BROKER;
+    uint16_t port = (settings.mqttPort > 0) ? settings.mqttPort : MQTT_PORT;
+
+    mqttClient.setServer(broker, port);
     mqttClient.setCallback(onMessage);
     mqttClient.setBufferSize(MQTT_MAX_PACKET_SIZE);
 
     Serial.printf("MQTT configured:\n");
-    Serial.printf("  Broker: %s:%d\n", MQTT_BROKER, MQTT_PORT);
+    Serial.printf("  Broker: %s:%d\n", broker, port);
     Serial.printf("  Device ID (MAC): %s\n", deviceMAC);
     Serial.printf("  Command topic: %s\n", deviceTopicCommand);
     Serial.printf("  Status topic: %s\n", deviceTopicStatus);
@@ -48,11 +53,18 @@ void MQTTClientManager::begin(const char* macAddress) {
 bool MQTTClientManager::connect() {
     Serial.println("Connecting to MQTT broker...");
 
+    // Get MQTT credentials from device configuration
+    const DeviceConfig::Settings& settings = deviceConfig.getSettings();
+
     // Use MAC as client ID for uniqueness
+    // Use stored credentials if available, otherwise fall back to compiled defaults
+    const char* user = (strlen(settings.mqttUser) > 0) ? settings.mqttUser : MQTT_USER;
+    const char* password = (strlen(settings.mqttPassword) > 0) ? settings.mqttPassword : MQTT_PASSWORD;
+
     bool success = mqttClient.connect(
         deviceMAC,
-        MQTT_USER,
-        MQTT_PASSWORD
+        user,
+        password
     );
 
     if (success) {
