@@ -14,7 +14,6 @@ class DeviceConfig {
 public:
     struct Settings {
         char deviceID[32];
-        char lineCode[32];
         char mqttBroker[64];
         uint16_t mqttPort;
         char mqttUser[32];
@@ -43,7 +42,6 @@ public:
 
     // Update settings (and save to NVS)
     bool setDeviceID(const char* id);
-    bool setLineCode(const char* code);
     bool setMQTTBroker(const char* broker, uint16_t port = 1883);
     bool setMQTTAuth(const char* user, const char* password);
     bool setNetworkMode(bool dhcp);

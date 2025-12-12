@@ -15,7 +15,6 @@ void DeviceConfig::begin() {
 void DeviceConfig::loadSettings() {
     // Load existing network settings
     prefs.getString("device_id", settings.deviceID, sizeof(settings.deviceID));
-    prefs.getString("line_code", settings.lineCode, sizeof(settings.lineCode));
     prefs.getString("mqtt_broker", settings.mqttBroker, sizeof(settings.mqttBroker));
     settings.mqttPort = prefs.getUShort("mqtt_port", 1883);
     prefs.getString("mqtt_user", settings.mqttUser, sizeof(settings.mqttUser));
@@ -41,7 +40,6 @@ void DeviceConfig::loadSettings() {
 
 void DeviceConfig::loadDefaults() {
     strncpy(settings.deviceID, "ESP32-Device", sizeof(settings.deviceID) - 1);
-    strncpy(settings.lineCode, "LINE-01", sizeof(settings.lineCode) - 1);
     strncpy(settings.mqttBroker, "10.221.21.100", sizeof(settings.mqttBroker) - 1);
     settings.mqttPort = 1883;
     settings.useDHCP = true;
@@ -57,7 +55,6 @@ void DeviceConfig::loadDefaults() {
 bool DeviceConfig::save() {
     // Save existing settings
     prefs.putString("device_id", settings.deviceID);
-    prefs.putString("line_code", settings.lineCode);
     prefs.putString("mqtt_broker", settings.mqttBroker);
     prefs.putUShort("mqtt_port", settings.mqttPort);
     prefs.putString("mqtt_user", settings.mqttUser);
@@ -84,15 +81,6 @@ bool DeviceConfig::setDeviceID(const char* id) {
     }
     strncpy(settings.deviceID, id, sizeof(settings.deviceID) - 1);
     settings.deviceID[sizeof(settings.deviceID) - 1] = '\0';
-    return save();
-}
-
-bool DeviceConfig::setLineCode(const char* code) {
-    if (strlen(code) == 0 || strlen(code) >= sizeof(settings.lineCode)) {
-        return false;
-    }
-    strncpy(settings.lineCode, code, sizeof(settings.lineCode) - 1);
-    settings.lineCode[sizeof(settings.lineCode) - 1] = '\0';
     return save();
 }
 
@@ -217,7 +205,6 @@ void DeviceConfig::resetToDefaults() {
 void DeviceConfig::printSettings() {
     Serial.println("\n=== Device Configuration ===");
     Serial.printf("Device ID:     %s\n", settings.deviceID);
-    Serial.printf("Line Code:     %s\n", settings.lineCode);
     Serial.printf("MQTT Broker:   %s:%d\n", settings.mqttBroker, settings.mqttPort);
     Serial.printf("MQTT User:     %s\n", strlen(settings.mqttUser) > 0 ? settings.mqttUser : "(none)");
     Serial.printf("Network Mode:  %s\n", settings.useDHCP ? "DHCP" : "Static IP");

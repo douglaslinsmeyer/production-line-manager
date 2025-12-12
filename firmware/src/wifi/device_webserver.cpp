@@ -163,12 +163,10 @@ void DeviceWebServer::handleSaveMQTT() {
 }
 
 void DeviceWebServer::handleSaveDevice() {
-    if (webServer->hasArg("device_id") && webServer->hasArg("line_code")) {
+    if (webServer->hasArg("device_id")) {
         String deviceID = webServer->arg("device_id");
-        String lineCode = webServer->arg("line_code");
 
         deviceConfig.setDeviceID(deviceID.c_str());
-        deviceConfig.setLineCode(lineCode.c_str());
         deviceConfig.save();
 
         webServer->send(200, "application/json",
@@ -418,7 +416,6 @@ String DeviceWebServer::generateHomePage() {
     html += "<tr><th>Property</th><th>Value</th></tr>";
     html += "<tr><td>Device ID</td><td>" + String(settings.deviceID) + "</td></tr>";
     html += "<tr><td>MAC Address</td><td>" + String(deviceMAC) + "</td></tr>";
-    html += "<tr><td>Line Code</td><td>" + String(settings.lineCode) + "</td></tr>";
     html += "<tr><td>Device Type</td><td>" + String(DEVICE_TYPE) + "</td></tr>";
     html += "<tr><td>Firmware Version</td><td>" + String(FIRMWARE_VERSION) + "</td></tr>";
     html += "<tr><td>Uptime</td><td>" + String(millis() / 1000) + " seconds</td></tr>";
@@ -738,11 +735,6 @@ String DeviceWebServer::generateDevicePage() {
     html += "<div class='form-group'>";
     html += "<label>Device ID:</label>";
     html += "<input type='text' name='device_id' value='" + String(settings.deviceID) + "' required maxlength='32'>";
-    html += "</div>";
-
-    html += "<div class='form-group'>";
-    html += "<label>Line Code:</label>";
-    html += "<input type='text' name='line_code' value='" + String(settings.lineCode) + "' required maxlength='32'>";
     html += "</div>";
 
     html += "<button type='submit' class='btn btn-success'>Save Device Configuration</button>";
