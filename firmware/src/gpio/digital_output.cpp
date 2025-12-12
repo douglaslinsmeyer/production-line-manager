@@ -6,7 +6,8 @@
 #define TCA9554_POLARITY_REG 0x02
 #define TCA9554_CONFIG_REG   0x03
 
-DigitalOutputManager::DigitalOutputManager() : outputState(0x00) {
+DigitalOutputManager::DigitalOutputManager() : outputState(0xFF) {
+    // Initialize to 0xFF (all outputs OFF due to inverted logic)
 }
 
 bool DigitalOutputManager::begin() {
@@ -31,13 +32,14 @@ bool DigitalOutputManager::begin() {
         return false;
     }
 
-    // Set all outputs LOW initially
-    if (!writeRegister(TCA9554_OUTPUT_REG, 0x00)) {
+    // Set all outputs OFF initially (0xFF due to inverted logic)
+    // Note: Darlington sinking transistors require HIGH=OFF, LOW=ON
+    if (!writeRegister(TCA9554_OUTPUT_REG, 0xFF)) {
         Serial.println("Failed to set initial output state");
         return false;
     }
 
-    outputState = 0x00;
+    outputState = 0xFF;
     Serial.println("TCA9554PWR initialized - all outputs OFF");
     return true;
 }
