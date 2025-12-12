@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	httpSwagger "github.com/swaggo/http-swagger"
@@ -8,6 +10,11 @@ import (
 
 	"ping/production-line-api/internal/service"
 )
+
+// SSEHandler defines the interface for SSE handler
+type SSEHandler interface {
+	ServeSSE(w http.ResponseWriter, r *http.Request)
+}
 
 // NewRouter creates and configures the HTTP router
 func NewRouter(
@@ -17,6 +24,7 @@ func NewRouter(
 	scheduleService *service.ScheduleService,
 	complianceService *service.ComplianceService,
 	deviceHandler *DeviceHandler,
+	sseHandler SSEHandler,
 	corsOrigins string,
 	logger *zap.Logger,
 ) *chi.Mux {
@@ -52,6 +60,9 @@ func NewRouter(
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
+		// Server-Sent Events stream for real-time updates
+		r.Get("/events/stream", sseHandler.ServeSSE)
+
 		// Production lines
 		r.Route("/lines", func(r chi.Router) {
 			r.Get("/", lineHandler.List)

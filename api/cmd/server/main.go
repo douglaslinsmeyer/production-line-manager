@@ -33,6 +33,7 @@ import (
 	"ping/production-line-api/internal/mqtt"
 	"ping/production-line-api/internal/repository"
 	"ping/production-line-api/internal/service"
+	"ping/production-line-api/internal/sse"
 )
 
 func main() {
@@ -91,9 +92,13 @@ func main() {
 	defer mqttClient.Disconnect()
 	log.Info("MQTT client connected")
 
-	// Setup MQTT publisher and device discovery handler
-	mqttPublisher := mqtt.NewPublisher(mqttClient, log)
-	deviceDiscoveryHandler := mqtt.NewDeviceDiscoveryHandler(deviceRepo, mqttPublisher, log)
+	// Setup SSE hub for real-time web client updates
+	sseHub := sse.NewHub(log)
+	go sseHub.Run()
+	log.Info("SSE hub started")
+
+	// Setup MQTT publisher with SSE integration (device discovery handler will be created after services)
+	mqttPublisher := mqtt.NewPublisher(mqttClient, sseHub, log)
 
 	// Setup external clients
 	var holidaysClient *openholidays.Client
@@ -109,7 +114,10 @@ func main() {
 	scheduleService := service.NewScheduleService(scheduleRepo, lineRepo, holidaysClient, cfg.HolidaysCountryCode, log)
 	complianceService := service.NewComplianceService(complianceRepo, lineRepo, log)
 
-	// Setup MQTT subscriber (after services are created)
+	// Setup device discovery handler (after lineService is created)
+	deviceDiscoveryHandler := mqtt.NewDeviceDiscoveryHandler(deviceRepo, mqttPublisher, lineService, log)
+
+	// Setup MQTT subscriber (after services and handlers are created)
 	mqttSubscriber := mqtt.NewSubscriber(mqttClient, lineService, deviceDiscoveryHandler, log)
 
 	// Start MQTT subscriber
@@ -121,6 +129,9 @@ func main() {
 	// Create device handler (uses repository directly, no service layer)
 	deviceHandler := handler.NewDeviceHandler(deviceRepo, mqttPublisher, log)
 
+	// Create SSE handler
+	sseHandler := sse.NewHandler(sseHub, log)
+
 	// Setup router
 	router := handler.NewRouter(
 		lineService,
@@ -129,6 +140,7 @@ func main() {
 		scheduleService,
 		complianceService,
 		deviceHandler,
+		sseHandler,
 		cfg.CORSAllowedOrigins,
 		log,
 	)
@@ -171,6 +183,9 @@ func main() {
 				log.Error("Failed to close server", zap.Error(err))
 			}
 		}
+
+		// Shutdown SSE hub
+		sseHub.Shutdown()
 
 		log.Info("Server stopped gracefully")
 	}

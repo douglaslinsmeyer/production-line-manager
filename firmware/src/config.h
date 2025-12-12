@@ -33,7 +33,8 @@
 #define HEARTBEAT_INTERVAL 30000  // 30 seconds
 #define DEBOUNCE_DELAY 50         // 50ms debounce for inputs
 #define BOOT_STABILIZATION_DELAY 100  // 100ms wait after boot for glitches to settle
-#define INPUT_READY_DELAY 50      // Additional 50ms before first input read
+#define INPUT_READY_DELAY 50      // Hardware stabilization before first read
+                                  // Note: INPUT_GRACE_PERIOD (2s) in digital_input.cpp suppresses callbacks
 
 // WiFi Configuration
 #define WIFI_AP_CHANNEL 6                 // WiFi channel for AP mode
@@ -53,6 +54,11 @@
 #define CONTROL_BUTTON_GPIO 4              // GPIO4 (DIN1)
 #define CONTROL_BUTTON_LONG_PRESS 5000     // 5 seconds for long press (maintenance mode)
 #define BUTTON_LED_CHANNEL 4               // EXIO5 (TCA9554PWR channel 4, 0-indexed)
+
+// Tower Light Configuration (Stack Light D01/D02/D03)
+#define TOWER_LIGHT_RED_CHANNEL    0       // D01 (DOUT1) - Red
+#define TOWER_LIGHT_YELLOW_CHANNEL 1       // D02 (DOUT2) - Yellow
+#define TOWER_LIGHT_GREEN_CHANNEL  2       // D03 (DOUT3) - Green
 
 // Button LED Pattern Timing
 #define BUTTON_LED_MAINTENANCE_PERIOD 500  // 500ms blink for maintenance

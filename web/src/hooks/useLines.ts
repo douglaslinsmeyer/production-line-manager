@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 import { linesApi, labelsApi } from '@/api/lines';
-import type { CreateLineRequest, UpdateLineRequest, Status } from '@/api/types';
+import type { CreateLineRequest, UpdateLineRequest, Status, ProductionLine } from '@/api/types';
+import { useSSE } from './useSSE';
 
 // Query keys for cache management
 export const lineKeys = {
@@ -14,12 +16,57 @@ export const lineKeys = {
   lineLabels: (id: string) => [...lineKeys.detail(id), 'labels'] as const,
 };
 
-// Get all production lines with auto-refetch
+// StatusEvent from SSE
+interface StatusEvent {
+  type: string;
+  timestamp: string;
+  id: string;
+  code: string;
+  status: Status;
+}
+
+// Get all production lines with auto-refetch and SSE updates
 export function useLines() {
+  const queryClient = useQueryClient();
+  const [sseConnected, setSSEConnected] = useState(false);
+
+  // Handle SSE status events
+  const handleStatusEvent = useCallback((event: StatusEvent) => {
+    console.log('Received line status event via SSE:', event);
+
+    // Update the specific line in the detail cache
+    queryClient.setQueryData<ProductionLine>(
+      lineKeys.detail(event.id),
+      (oldLine) => {
+        if (oldLine) {
+          return {
+            ...oldLine,
+            status: event.status,
+            updated_at: event.timestamp,
+          };
+        }
+        return oldLine;
+      }
+    );
+
+    // Invalidate the list to trigger a refetch and update all line cards
+    queryClient.invalidateQueries({ queryKey: lineKeys.list() });
+  }, [queryClient]);
+
+  // Subscribe to SSE events for line status changes
+  const { connected } = useSSE<StatusEvent>('line.status', handleStatusEvent, true);
+
+  // Update SSE connection state
+  if (connected !== sseConnected) {
+    setSSEConnected(connected);
+    console.log(`SSE connection status changed: ${connected ? 'connected' : 'disconnected'}`);
+  }
+
   return useQuery({
     queryKey: lineKeys.list(),
     queryFn: linesApi.getLines,
-    refetchInterval: 5000, // Auto-refetch every 5 seconds for real-time updates
+    // Dynamic polling: 30s when SSE connected, 5s as fallback
+    refetchInterval: sseConnected ? 30000 : 5000,
     staleTime: 3000, // Consider data stale after 3 seconds
   });
 }

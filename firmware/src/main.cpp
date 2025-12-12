@@ -7,6 +7,7 @@
 #include "gpio/digital_output.h"
 #include "gpio/control_button.h"
 #include "gpio/button_led.h"
+#include "gpio/tower_light.h"
 #include "mqtt/mqtt_client.h"
 #include "identification.h"
 #include "state/line_state.h"
@@ -21,6 +22,7 @@ DeviceIdentification deviceID;
 LineStateManager lineState;
 ControlButton controlButton;
 ButtonLED buttonLED(&outputs);
+TowerLightManager towerLight(&outputs);
 
 // Device identification (MAC address)
 char deviceMAC[18];  // Format: "XX:XX:XX:XX:XX:XX"
@@ -174,6 +176,14 @@ void setup() {
     buttonLED.begin();
     buttonLED.setStatePattern(lineState.getState());
     Serial.println("✓ Button LED ready\n");
+
+    // ===================================================================
+    // STEP 9d: Initialize Tower Lights
+    // ===================================================================
+    Serial.println("Initializing tower lights...");
+    towerLight.begin();
+    towerLight.setStatePattern(lineState.getState());
+    Serial.println("✓ Tower lights ready\n");
 
     // ===================================================================
     // STEP 10: Display PSRAM Info
@@ -433,6 +443,13 @@ void onMQTTCommand(const char* command, uint8_t channel, bool state) {
 
     // Handle set_output command
     if (strcmp(command, "set_output") == 0) {
+        // Block tower light channels from manual control
+        if (TowerLightManager::isTowerLightChannel(channel)) {
+            Serial.printf("✗ Channel %d is reserved for tower lights (automatic control only)\n",
+                         channel + 1);
+            return;
+        }
+
         if (outputs.setOutput(channel, state)) {
             Serial.printf("✓ Output CH%d set to %s\n", channel + 1, state ? "ON" : "OFF");
 
@@ -462,6 +479,9 @@ void onLineStateChange(LineState oldState, LineState newState) {
 
     // Update button LED pattern
     buttonLED.setStatePattern(newState);
+
+    // Update tower lights pattern
+    towerLight.setStatePattern(newState);
 
     // Publish state change immediately to MQTT (don't wait for heartbeat)
     if (mqtt.isConnected()) {

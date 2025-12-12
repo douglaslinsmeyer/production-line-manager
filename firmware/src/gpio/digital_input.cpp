@@ -1,6 +1,11 @@
 #include "digital_input.h"
 #include "config.h"
 
+// Grace period to suppress boot-time input-change messages
+// During this period, inputs are read and state is tracked, but callbacks are suppressed
+// The status message (published every 30s) contains complete input state as bitmasks
+const unsigned long INPUT_GRACE_PERIOD = 2000;  // 2 seconds
+
 // Digital input pin array (DIN CH1-8 = GPIO4-11)
 const uint8_t DigitalInputManager::DIN_PINS[8] = {
     DIN_PIN_1, DIN_PIN_2, DIN_PIN_3, DIN_PIN_4,
@@ -95,6 +100,14 @@ void DigitalInputManager::setCallback(InputChangeCallback callback) {
 }
 
 void DigitalInputManager::notifyChange(uint8_t channel, bool state) {
+    // Suppress callbacks during grace period to avoid boot noise
+    // Inputs are still tracked, but change events are not published
+    if (millis() - bootTime < INPUT_GRACE_PERIOD) {
+        Serial.printf("Input CH%d changed to %s (suppressed - grace period)\n",
+                     channel + 1, state ? "HIGH" : "LOW");
+        return;
+    }
+
     Serial.printf("Input CH%d changed to %s\n",
                  channel + 1, state ? "HIGH" : "LOW");
 

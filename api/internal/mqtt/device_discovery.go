@@ -1,9 +1,11 @@
 package mqtt
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
+	"github.com/google/uuid"
 	"ping/production-line-api/internal/domain"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -12,21 +14,29 @@ import (
 
 // DeviceDiscoveryHandler handles device announcement messages
 type DeviceDiscoveryHandler struct {
-	deviceRepo domain.DeviceRepository
-	publisher  *Publisher
-	logger     *zap.Logger
+	deviceRepo  domain.DeviceRepository
+	publisher   *Publisher
+	lineService LineService
+	logger      *zap.Logger
+}
+
+// LineService defines the interface for line operations
+type LineService interface {
+	SetStatus(ctx context.Context, id uuid.UUID, status domain.Status, source string, sourceDetail interface{}) (*domain.ProductionLine, error)
 }
 
 // NewDeviceDiscoveryHandler creates a new device discovery handler
 func NewDeviceDiscoveryHandler(
 	deviceRepo domain.DeviceRepository,
 	publisher *Publisher,
+	lineService LineService,
 	logger *zap.Logger,
 ) *DeviceDiscoveryHandler {
 	return &DeviceDiscoveryHandler{
-		deviceRepo: deviceRepo,
-		publisher:  publisher,
-		logger:     logger,
+		deviceRepo:  deviceRepo,
+		publisher:   publisher,
+		lineService: lineService,
+		logger:      logger,
 	}
 }
 
@@ -102,12 +112,13 @@ func (h *DeviceDiscoveryHandler) HandleDeviceStatus(client mqtt.Client, msg mqtt
 
 	// Parse message
 	var status struct {
-		DeviceID          string `json:"device_id"`
-		DigitalInputs     int    `json:"digital_inputs"`
-		DigitalOutputs    int    `json:"digital_outputs"`
-		EthernetConnected bool   `json:"ethernet_connected"`
+		DeviceID          string  `json:"device_id"`
+		LineState         string  `json:"line_state"`
+		DigitalInputs     int     `json:"digital_inputs"`
+		DigitalOutputs    int     `json:"digital_outputs"`
+		EthernetConnected bool    `json:"ethernet_connected"`
 		AssignedLine      *string `json:"assigned_line"`
-		Timestamp         int64  `json:"timestamp"`
+		Timestamp         int64   `json:"timestamp"`
 	}
 
 	if err := json.Unmarshal(msg.Payload(), &status); err != nil {
@@ -129,15 +140,68 @@ func (h *DeviceDiscoveryHandler) HandleDeviceStatus(client mqtt.Client, msg mqtt
 		return
 	}
 
-	if assignment != nil {
-		// Device is assigned - translate to line status event
-		h.logger.Debug("Translating device status to line event",
-			zap.String("device_mac", status.DeviceID),
-			zap.String("line_id", assignment.LineID.String()))
-
-		// TODO: Publish to production-lines/events/status
-		// This will be handled in the status change logic
+	if assignment == nil {
+		h.logger.Debug("Device not assigned to a line - skipping status translation",
+			zap.String("device_mac", status.DeviceID))
+		return
 	}
+
+	// Device is assigned - translate line_state to production line status
+	h.logger.Debug("Translating device status to line event",
+		zap.String("device_mac", status.DeviceID),
+		zap.String("line_id", assignment.LineID.String()),
+		zap.String("line_state", status.LineState))
+
+	// Map firmware line_state to domain.Status
+	var lineStatus domain.Status
+	switch status.LineState {
+	case "ON":
+		lineStatus = domain.StatusOn
+	case "OFF":
+		lineStatus = domain.StatusOff
+	case "MAINTENANCE":
+		lineStatus = domain.StatusMaintenance
+	case "ERROR":
+		lineStatus = domain.StatusError
+	case "UNKNOWN":
+		// Skip update - device not synchronized yet
+		h.logger.Debug("Device line_state is UNKNOWN - skipping status update",
+			zap.String("device_mac", status.DeviceID))
+		return
+	default:
+		h.logger.Warn("Unknown line_state value from device",
+			zap.String("device_mac", status.DeviceID),
+			zap.String("line_state", status.LineState))
+		return
+	}
+
+	// Prepare source detail for audit trail
+	sourceDetail := map[string]interface{}{
+		"device_mac":       status.DeviceID,
+		"digital_inputs":   status.DigitalInputs,
+		"digital_outputs":  status.DigitalOutputs,
+		"device_timestamp": status.Timestamp,
+	}
+
+	// Update production line status via LineService
+	// This will also publish to MQTT and trigger SSE broadcast
+	ctx := context.Background()
+	updatedLine, err := h.lineService.SetStatus(ctx, assignment.LineID, lineStatus, "device", sourceDetail)
+	if err != nil {
+		h.logger.Error("Failed to update line status from device",
+			zap.String("device_mac", status.DeviceID),
+			zap.String("line_id", assignment.LineID.String()),
+			zap.String("status", lineStatus.String()),
+			zap.Error(err))
+		return
+	}
+
+	h.logger.Info("Line status updated from device",
+		zap.String("device_mac", status.DeviceID),
+		zap.String("line_id", updatedLine.ID.String()),
+		zap.String("line_code", updatedLine.Code),
+		zap.String("old_status", updatedLine.Status.String()),
+		zap.String("new_status", lineStatus.String()))
 }
 
 // HandleInputChange processes device input change events

@@ -9,18 +9,21 @@ import (
 	"go.uber.org/zap"
 
 	"ping/production-line-api/internal/domain"
+	"ping/production-line-api/internal/sse"
 )
 
-// Publisher publishes production line events to MQTT
+// Publisher publishes production line events to MQTT and SSE
 type Publisher struct {
 	client *Client
+	sseHub *sse.Hub
 	logger *zap.Logger
 }
 
 // NewPublisher creates a new MQTT publisher
-func NewPublisher(client *Client, logger *zap.Logger) *Publisher {
+func NewPublisher(client *Client, sseHub *sse.Hub, logger *zap.Logger) *Publisher {
 	return &Publisher{
 		client: client,
+		sseHub: sseHub,
 		logger: logger,
 	}
 }
@@ -33,7 +36,13 @@ func (p *Publisher) PublishCreated(line *domain.ProductionLine) error {
 		Data:      line,
 	}
 
-	return p.publishEvent(TopicEventCreated, event)
+	if err := p.publishEvent(TopicEventCreated, event); err != nil {
+		return err
+	}
+
+	// Also broadcast to SSE clients
+	p.broadcastToSSE("line.created", event)
+	return nil
 }
 
 // PublishUpdated publishes a production line updated event
@@ -44,7 +53,13 @@ func (p *Publisher) PublishUpdated(line *domain.ProductionLine) error {
 		Data:      line,
 	}
 
-	return p.publishEvent(TopicEventUpdated, event)
+	if err := p.publishEvent(TopicEventUpdated, event); err != nil {
+		return err
+	}
+
+	// Also broadcast to SSE clients
+	p.broadcastToSSE("line.updated", event)
+	return nil
 }
 
 // PublishDeleted publishes a production line deleted event
@@ -56,7 +71,13 @@ func (p *Publisher) PublishDeleted(id uuid.UUID, code string) error {
 		Code:      code,
 	}
 
-	return p.publishEvent(TopicEventDeleted, event)
+	if err := p.publishEvent(TopicEventDeleted, event); err != nil {
+		return err
+	}
+
+	// Also broadcast to SSE clients
+	p.broadcastToSSE("line.deleted", event)
+	return nil
 }
 
 // PublishStatus publishes a production line status change event
@@ -69,7 +90,13 @@ func (p *Publisher) PublishStatus(line *domain.ProductionLine) error {
 		Status:    line.Status,
 	}
 
-	return p.publishEvent(TopicEventStatus, event)
+	if err := p.publishEvent(TopicEventStatus, event); err != nil {
+		return err
+	}
+
+	// Also broadcast to SSE clients
+	p.broadcastToSSE("line.status", event)
+	return nil
 }
 
 // PublishRaw publishes raw payload to a topic
@@ -104,4 +131,30 @@ func (p *Publisher) publishEvent(topic string, event interface{}) error {
 		zap.Int("payload_size", len(payload)))
 
 	return nil
+}
+
+// broadcastToSSE broadcasts an event to SSE clients
+func (p *Publisher) broadcastToSSE(eventType string, event interface{}) {
+	// Skip if no SSE hub configured
+	if p.sseHub == nil {
+		return
+	}
+
+	// Marshal event data
+	data, err := json.Marshal(event)
+	if err != nil {
+		p.logger.Error("failed to marshal event for SSE",
+			zap.String("event_type", eventType),
+			zap.Error(err))
+		return
+	}
+
+	// Broadcast to SSE clients
+	p.sseHub.Broadcast(sse.Event{
+		Type: eventType,
+		Data: data,
+	})
+
+	p.logger.Debug("event broadcast to SSE clients",
+		zap.String("event_type", eventType))
 }
