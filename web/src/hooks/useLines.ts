@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { linesApi, labelsApi } from '@/api/lines';
 import type { CreateLineRequest, UpdateLineRequest, Status, ProductionLine } from '@/api/types';
 import { useSSE } from './useSSE';
@@ -25,10 +25,9 @@ interface StatusEvent {
   status: Status;
 }
 
-// Get all production lines with auto-refetch and SSE updates
+// Get all production lines with SSE updates
 export function useLines() {
   const queryClient = useQueryClient();
-  const [sseConnected, setSSEConnected] = useState(false);
 
   // Handle SSE status events
   const handleStatusEvent = useCallback((event: StatusEvent) => {
@@ -54,20 +53,12 @@ export function useLines() {
   }, [queryClient]);
 
   // Subscribe to SSE events for line status changes
-  const { connected } = useSSE<StatusEvent>('line.status', handleStatusEvent, true);
-
-  // Update SSE connection state
-  if (connected !== sseConnected) {
-    setSSEConnected(connected);
-    console.log(`SSE connection status changed: ${connected ? 'connected' : 'disconnected'}`);
-  }
+  useSSE<StatusEvent>('line.status', handleStatusEvent, true);
 
   return useQuery({
     queryKey: lineKeys.list(),
     queryFn: linesApi.getLines,
-    // Dynamic polling: 30s when SSE connected, 5s as fallback
-    refetchInterval: sseConnected ? 30000 : 5000,
-    staleTime: 3000, // Consider data stale after 3 seconds
+    staleTime: 60000, // Consider data stale after 1 minute
   });
 }
 
@@ -77,7 +68,6 @@ export function useLine(id: string) {
     queryKey: lineKeys.detail(id),
     queryFn: () => linesApi.getLine(id),
     enabled: !!id, // Only run if ID is provided
-    refetchInterval: 5000,
   });
 }
 
@@ -147,7 +137,6 @@ export function useStatusHistory(id: string, limit = 100) {
     queryKey: [...lineKeys.history(id), limit],
     queryFn: () => linesApi.getHistory(id, limit),
     enabled: !!id,
-    refetchInterval: 10000, // Refetch every 10 seconds
   });
 }
 

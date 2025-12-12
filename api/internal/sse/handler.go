@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -35,9 +36,13 @@ func (h *Handler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no") // Disable buffering in nginx
+	w.Header().Set("X-Accel-Buffering", "no") // Disable buffering in nginx/proxies
+
+	// Write HTTP status code FIRST before any data - critical for SSE
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush() // Flush headers immediately to establish streaming connection
 
 	// Register client with hub
 	client := h.hub.RegisterClient(r.Context())
@@ -51,6 +56,17 @@ func (h *Handler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "event: connected\n")
 	fmt.Fprintf(w, "data: {\"client_id\":\"%s\"}\n\n", client.id.String())
 	flusher.Flush()
+
+	// Send padding comments to prime browser's EventSource buffer
+	// Browser buffers ~4KB before processing stream in real-time
+	// Sending 8KB of comments immediately exceeds the buffer threshold
+	for i := 0; i < 4; i++ {
+		padding := ": " + strings.Repeat("X", 2000) + "\n\n"
+		fmt.Fprintf(w, "%s", padding)
+	}
+	flusher.Flush()
+
+	h.logger.Debug("Sent initial padding to prime browser buffer", zap.Int("padding_bytes", 8000))
 
 	// Setup heartbeat ticker to keep connection alive
 	heartbeat := time.NewTicker(30 * time.Second)
@@ -108,10 +124,13 @@ func (h *Handler) sendEvent(w http.ResponseWriter, flusher http.Flusher, event E
 		return err
 	}
 
-	// Write SSE formatted event
+	// Write SSE formatted event with immediate flushing
 	// Format: event: <type>\ndata: <json>\n\n
-	fmt.Fprintf(w, "event: %s\n", event.Type)
-	fmt.Fprintf(w, "data: %s\n\n", string(jsonData))
+	if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, string(jsonData)); err != nil {
+		return err
+	}
+
+	// Flush immediately after writing
 	flusher.Flush()
 
 	return nil

@@ -20,6 +20,12 @@ export function useSSE<T>(
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<Error | null>(null)
   const clientRef = useRef<SSEClient | null>(null)
+  const onMessageRef = useRef(onMessage)
+
+  // Update the callback ref when onMessage changes (without reconnecting)
+  useEffect(() => {
+    onMessageRef.current = onMessage
+  }, [onMessage])
 
   useEffect(() => {
     // Skip if disabled
@@ -38,7 +44,7 @@ export function useSSE<T>(
         (type: string, data: any) => {
           // Only call onMessage for the specific event type we're interested in
           if (type === eventType) {
-            onMessage(data as T)
+            onMessageRef.current(data as T)
           }
         },
         () => {
@@ -63,7 +69,7 @@ export function useSSE<T>(
         clientRef.current = null
       }
     }
-  }, [eventType, onMessage, enabled])
+  }, [eventType, enabled])
 
   return {
     connected,

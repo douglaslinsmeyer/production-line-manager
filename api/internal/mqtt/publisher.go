@@ -155,6 +155,7 @@ func (p *Publisher) broadcastToSSE(eventType string, event interface{}) {
 		Data: data,
 	})
 
-	p.logger.Debug("event broadcast to SSE clients",
-		zap.String("event_type", eventType))
+	p.logger.Info("event broadcast to SSE clients",
+		zap.String("event_type", eventType),
+		zap.Int("client_count", p.sseHub.ClientCount()))
 }

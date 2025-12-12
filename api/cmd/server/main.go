@@ -150,7 +150,7 @@ func main() {
 		Addr:         ":" + cfg.Port,
 		Handler:      router,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 0, // No timeout for SSE streaming endpoints
 		IdleTimeout:  60 * time.Second,
 	}
 
