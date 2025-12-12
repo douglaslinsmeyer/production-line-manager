@@ -4,6 +4,7 @@
 #include <PubSubClient.h>
 #include <WiFiClient.h>
 #include <ArduinoJson.h>
+#include "state/line_state.h"
 
 // Forward declaration
 class ConnectionManager;
@@ -35,8 +36,8 @@ public:
     // Publish device announcement (discovery)
     bool publishAnnouncement();
 
-    // Publish status event
-    bool publishStatus(uint8_t inputs, uint8_t outputs, bool networkConnected);
+    // Publish status event (with line state)
+    bool publishStatus(uint8_t inputs, uint8_t outputs, bool networkConnected, LineState lineState = LINE_STATE_UNKNOWN);
 
     // Publish input change event
     bool publishInputChange(uint8_t channel, bool state, uint8_t allInputs);

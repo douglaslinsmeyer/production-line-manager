@@ -21,15 +21,15 @@ DigitalInputManager::DigitalInputManager()
 }
 
 void DigitalInputManager::begin() {
-    // Initialize all digital input pins
-    // No pull-up needed - optocoupler isolated
+    // Initialize all digital input pins with internal pull-ups
+    // Pull-ups prevent floating inputs and electrical noise (per Waveshare demo)
     for (int i = 0; i < 8; i++) {
-        pinMode(DIN_PINS[i], INPUT);
+        pinMode(DIN_PINS[i], INPUT_PULLUP);
     }
 
     bootTime = millis();
 
-    Serial.println("Digital inputs initialized (GPIO4-11)");
+    Serial.println("Digital inputs initialized (GPIO4-11) with INPUT_PULLUP");
     Serial.println("WARNING: Waiting for boot stabilization due to ESP32-S3 power-up glitches");
 }
 
@@ -42,6 +42,13 @@ void DigitalInputManager::update() {
         }
         bootStabilized = true;
         Serial.println("Digital inputs ready - boot stabilization complete");
+
+        // Debug: Print initial input states
+        Serial.print("Initial input states: ");
+        for (int i = 0; i < 8; i++) {
+            Serial.printf("CH%d=%d ", i+1, inputState[i] ? 1 : 0);
+        }
+        Serial.println();
     }
 
     // Read and debounce all inputs
@@ -50,6 +57,7 @@ void DigitalInputManager::update() {
 
         // Check if reading changed
         if (reading != lastReading[i]) {
+            Serial.printf("[DEBUG] CH%d reading changed: %d -> %d\n", i+1, lastReading[i], reading);
             lastDebounceTime[i] = millis();
         }
 
@@ -57,6 +65,7 @@ void DigitalInputManager::update() {
         if ((millis() - lastDebounceTime[i]) > debounceDelay) {
             // Check if state actually changed
             if (reading != inputState[i]) {
+                Serial.printf("[DEBUG] CH%d state change confirmed after debounce\n", i+1);
                 inputState[i] = reading;
                 notifyChange(i, reading);
             }

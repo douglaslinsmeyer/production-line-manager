@@ -48,6 +48,16 @@
 #define BOOT_BUTTON_LONG_PRESS 15000      // 15 seconds for long press (AP mode trigger)
 #define BOOT_BUTTON_WARNING_TIME 10000    // 10 seconds warning (beep)
 
+// Control Button Configuration
+#define CONTROL_BUTTON_CHANNEL 0           // DIN1 (first digital input, 0-indexed)
+#define CONTROL_BUTTON_GPIO 4              // GPIO4 (DIN1)
+#define CONTROL_BUTTON_LONG_PRESS 5000     // 5 seconds for long press (maintenance mode)
+#define BUTTON_LED_CHANNEL 4               // EXIO5 (TCA9554PWR channel 4, 0-indexed)
+
+// Button LED Pattern Timing
+#define BUTTON_LED_MAINTENANCE_PERIOD 500  // 500ms blink for maintenance
+#define BUTTON_LED_ERROR_PERIOD 200        // 200ms fast blink for error
+
 // MQTT Buffer Configuration
 #define MQTT_MAX_PACKET_SIZE 512          // Maximum MQTT packet size
 

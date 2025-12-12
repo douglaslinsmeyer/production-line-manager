@@ -7,6 +7,7 @@
 // External references
 extern DeviceConfig deviceConfig;
 extern ConnectionManager networkManager;
+extern LineStateManager lineState;
 
 // Static instance pointer for callback
 MQTTClientManager* MQTTClientManager::instance = nullptr;
@@ -185,7 +186,7 @@ bool MQTTClientManager::publishAnnouncement() {
     return success;
 }
 
-bool MQTTClientManager::publishStatus(uint8_t inputs, uint8_t outputs, bool networkConnected) {
+bool MQTTClientManager::publishStatus(uint8_t inputs, uint8_t outputs, bool networkConnected, LineState lineState) {
     if (!mqttClient.connected()) {
         return false;
     }
@@ -195,6 +196,7 @@ bool MQTTClientManager::publishStatus(uint8_t inputs, uint8_t outputs, bool netw
     // Create JSON status message
     JsonDocument doc;
     doc["device_id"] = deviceMAC;
+    doc["line_state"] = LineStateManager::stateToString(lineState);
     doc["digital_inputs"] = inputs;
     doc["digital_outputs"] = outputs;
     doc["network_connected"] = networkConnected;
@@ -215,7 +217,8 @@ bool MQTTClientManager::publishStatus(uint8_t inputs, uint8_t outputs, bool netw
     bool success = mqttClient.publish(deviceTopicStatus, buffer, len);
 
     if (success) {
-        Serial.printf("Published status: inputs=0x%02X outputs=0x%02X\n", inputs, outputs);
+        Serial.printf("Published status: line_state=%s inputs=0x%02X outputs=0x%02X\n",
+                     LineStateManager::stateToString(lineState), inputs, outputs);
     } else {
         Serial.println("ERROR: Failed to publish status");
     }
@@ -432,6 +435,33 @@ void MQTTClientManager::handleCommand(const char* payload) {
 
         mqttClient.publish(deviceTopicStatus, buffer, len);
         Serial.println("WiFi status published");
+        return;
+    }
+
+    // Handle set_line_state command (from API)
+    if (strcmp(command, "set_line_state") == 0) {
+        const char* stateStr = doc["state"] | "";
+
+        Serial.printf("Set line state command: %s\n", stateStr);
+
+        // Parse state string to enum
+        LineState newState = LINE_STATE_UNKNOWN;
+        if (strcmp(stateStr, "ON") == 0) {
+            newState = LINE_STATE_ON;
+        } else if (strcmp(stateStr, "OFF") == 0) {
+            newState = LINE_STATE_OFF;
+        } else if (strcmp(stateStr, "MAINTENANCE") == 0) {
+            newState = LINE_STATE_MAINTENANCE;
+        } else if (strcmp(stateStr, "ERROR") == 0) {
+            newState = LINE_STATE_ERROR;
+        } else {
+            Serial.printf("Invalid state: %s\n", stateStr);
+            return;
+        }
+
+        // Update line state (will trigger callback which publishes status)
+        lineState.setState(newState, "mqtt");
+
         return;
     }
 

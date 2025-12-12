@@ -5,8 +5,11 @@
 #include "gpio/boot_button.h"
 #include "gpio/digital_input.h"
 #include "gpio/digital_output.h"
+#include "gpio/control_button.h"
+#include "gpio/button_led.h"
 #include "mqtt/mqtt_client.h"
 #include "identification.h"
+#include "state/line_state.h"
 
 // Global managers
 ConnectionManager networkManager;
@@ -15,6 +18,9 @@ DigitalInputManager inputs;
 DigitalOutputManager outputs;
 MQTTClientManager mqtt;
 DeviceIdentification deviceID;
+LineStateManager lineState;
+ControlButton controlButton;
+ButtonLED buttonLED(&outputs);
 
 // Device identification (MAC address)
 char deviceMAC[18];  // Format: "XX:XX:XX:XX:XX:XX"
@@ -28,6 +34,9 @@ void onNetworkConnection(bool connected);
 void onMQTTCommand(const char* command, uint8_t channel, bool state);
 void onFlashIdentify();
 void onBootButtonLongPress(uint32_t duration);
+void onLineStateChange(LineState oldState, LineState newState);
+void onControlButtonShortPress();
+void onControlButtonLongPress();
 String getMACAddress();
 
 void setup() {
@@ -142,6 +151,31 @@ void setup() {
     Serial.println("✓ Device identification ready\n");
 
     // ===================================================================
+    // STEP 9a: Initialize Production Line State Manager
+    // ===================================================================
+    Serial.println("Initializing production line state manager...");
+    lineState.begin();
+    lineState.setStateChangeCallback(onLineStateChange);
+    Serial.printf("✓ Line state: %s\n\n", lineState.getStateString());
+
+    // ===================================================================
+    // STEP 9b: Initialize Control Button
+    // ===================================================================
+    Serial.println("Initializing control button...");
+    controlButton.begin();
+    controlButton.setShortPressCallback(onControlButtonShortPress);
+    controlButton.setLongPressCallback(onControlButtonLongPress);
+    Serial.println("✓ Control button ready\n");
+
+    // ===================================================================
+    // STEP 9c: Initialize Button LED
+    // ===================================================================
+    Serial.println("Initializing button LED...");
+    buttonLED.begin();
+    buttonLED.setStatePattern(lineState.getState());
+    Serial.println("✓ Button LED ready\n");
+
+    // ===================================================================
     // STEP 10: Display PSRAM Info
     // ===================================================================
     Serial.printf("PSRAM Size: %d bytes\n", ESP.getPsramSize());
@@ -241,6 +275,12 @@ void loop() {
     // Update device identification (LED patterns)
     deviceID.update();
 
+    // Update control button (long press detection)
+    controlButton.update();
+
+    // Update button LED (pattern updates)
+    buttonLED.update();
+
     // Update boot button handler
     bootButton.update();
 
@@ -278,7 +318,8 @@ void loop() {
             mqtt.publishStatus(
                 inputs.getAllInputs(),
                 outputs.getAllOutputs(),
-                networkManager.isConnected()
+                networkManager.isConnected(),
+                lineState.getState()
             );
         }
     }
@@ -293,7 +334,17 @@ void loop() {
 // ===================================================================
 
 void onInputChange(uint8_t channel, bool state) {
-    // Publish input change to MQTT
+    Serial.printf("Input change: CH%d = %s\n", channel + 1, state ? "HIGH" : "LOW");
+
+    // Handle control button on DIN1 (channel 0)
+    if (channel == CONTROL_BUTTON_CHANNEL) {
+        Serial.printf("Control button detected on CH%d\n", channel + 1);
+        // Invert state: INPUT_PULLUP means LOW=pressed, HIGH=released
+        controlButton.handleButtonChange(!state);
+        return;  // Don't publish control button as input change
+    }
+
+    // Publish other input changes to MQTT
     if (mqtt.isConnected()) {
         mqtt.publishInputChange(channel, state, inputs.getAllInputs());
     }
@@ -312,14 +363,15 @@ String getMACAddress() {
     // Get MAC address from ESP32 eFuse
     uint64_t mac64 = ESP.getEfuseMac();
 
-    // ESP.getEfuseMac() returns MAC in reverse byte order
+    // ESP.getEfuseMac() returns MAC in little-endian byte order
+    // Extract bytes in reverse order to get proper MAC format
     uint8_t mac[6];
-    mac[0] = (mac64 >> 40) & 0xFF;
-    mac[1] = (mac64 >> 32) & 0xFF;
-    mac[2] = (mac64 >> 24) & 0xFF;
-    mac[3] = (mac64 >> 16) & 0xFF;
-    mac[4] = (mac64 >> 8) & 0xFF;
-    mac[5] = mac64 & 0xFF;
+    mac[0] = mac64 & 0xFF;           // LSB
+    mac[1] = (mac64 >> 8) & 0xFF;
+    mac[2] = (mac64 >> 16) & 0xFF;
+    mac[3] = (mac64 >> 24) & 0xFF;
+    mac[4] = (mac64 >> 32) & 0xFF;
+    mac[5] = (mac64 >> 40) & 0xFF;   // MSB
 
     char macStr[18];
     snprintf(macStr, sizeof(macStr),
@@ -388,7 +440,8 @@ void onMQTTCommand(const char* command, uint8_t channel, bool state) {
             mqtt.publishStatus(
                 inputs.getAllInputs(),
                 outputs.getAllOutputs(),
-                networkManager.isConnected()
+                networkManager.isConnected(),
+                lineState.getState()
             );
         } else {
             Serial.printf("✗ Failed to set output CH%d\n", channel + 1);
@@ -398,4 +451,36 @@ void onMQTTCommand(const char* command, uint8_t channel, bool state) {
     else {
         Serial.printf("Unknown command: %s\n", command);
     }
+}
+
+void onLineStateChange(LineState oldState, LineState newState) {
+    Serial.printf("\n========================================\n");
+    Serial.printf("  LINE STATE CHANGED: %s -> %s\n",
+                 LineStateManager::stateToString(oldState),
+                 LineStateManager::stateToString(newState));
+    Serial.printf("========================================\n\n");
+
+    // Update button LED pattern
+    buttonLED.setStatePattern(newState);
+
+    // Publish state change immediately to MQTT (don't wait for heartbeat)
+    if (mqtt.isConnected()) {
+        mqtt.publishStatus(
+            inputs.getAllInputs(),
+            outputs.getAllOutputs(),
+            networkManager.isConnected(),
+            newState
+        );
+    }
+}
+
+void onControlButtonShortPress() {
+    Serial.println("\n=== CONTROL BUTTON SHORT PRESS ===");
+    lineState.handleShortPress();
+}
+
+void onControlButtonLongPress() {
+    Serial.println("\n=== CONTROL BUTTON LONG PRESS (5s) ===");
+    Serial.println("Entering MAINTENANCE mode...");
+    lineState.handleLongPress();
 }

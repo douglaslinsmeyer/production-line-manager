@@ -9,8 +9,19 @@ PlatformIO-based firmware for Waveshare ESP32-S3-POE-ETH-8DI-8DO board with W550
 - **Flash**: 16MB
 - **PSRAM**: 8MB Octal
 - **Ethernet**: W5500 (POE 802.3af)
+- **WiFi**: 2.4GHz 802.11 b/g/n (Station + AP modes)
 - **Digital Inputs**: 8 channels (GPIO4-11) with optocoupler isolation
 - **Digital Outputs**: 8 channels via TCA9554PWR I2C expander
+
+## Network Connectivity
+
+The firmware supports three connection modes:
+
+1. **Ethernet (Primary)**: W5500 with POE support, auto-connects on boot
+2. **WiFi Station**: Connect to existing WiFi network, credentials stored in NVS
+3. **WiFi AP Mode**: Hosts configuration portal at http://192.168.4.1
+
+See [Network Configuration Documentation](docs/network-configuration.md) for details.
 
 ## Quick Start
 

@@ -109,7 +109,7 @@ production-line-manager/
 
 ### Infrastructure
 - PostgreSQL 15 + TimescaleDB
-- Eclipse Mosquitto (MQTT)
+- RabbitMQ 3.13 (MQTT + AMQP)
 - Docker + Docker Compose
 - GitHub Actions CI/CD
 
@@ -173,10 +173,19 @@ Production lines support 4 statuses:
 
 ## Documentation
 
-- **API Documentation**: See [api/README.md](api/README.md)
-- **Web Documentation**: See [web/README.md](web/README.md)
-- **Development Guide**: See [DEVELOPMENT.md](DEVELOPMENT.md)
-- **API Specs**: http://localhost:8080/swagger/index.html (when running)
+### Getting Started
+- **[Getting Started Guide](docs/getting-started.md)**: Setup and development environment
+- **[Architecture Overview](docs/architecture.md)**: System architecture and components
+- **[MQTT Topics](docs/mqtt/topics.md)**: Complete MQTT topic reference
+- **[MQTT Messages](docs/mqtt/message-formats.md)**: Message schemas and formats
+
+### Component Documentation
+- **API**: See [api/README.md](api/README.md) and [api/docs/](api/docs/)
+- **Firmware**: See [firmware/README.md](firmware/README.md) and [firmware/docs/](firmware/docs/)
+- **Web UI**: See [web/README.md](web/README.md) and [web/docs/](web/docs/)
+
+### API Reference
+- **Swagger UI**: http://localhost:8080/swagger/index.html (when running)
 
 ## Architecture
 
@@ -190,13 +199,13 @@ Production lines support 4 statuses:
                            ▼
                     ┌──────────────┐
                     │ MQTT Broker  │
-                    │  (Mosquitto) │
+                    │  (RabbitMQ)  │
                     └──────┬───────┘
                            │
                            ▼
                     ┌──────────────┐
-                    │ Shop Floor   │
-                    │ Controllers  │
+                    │  ESP32-S3    │
+                    │   Devices    │
                     └──────────────┘
 ```
 
