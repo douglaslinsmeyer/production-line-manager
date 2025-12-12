@@ -216,7 +216,7 @@
  /Users/douglasl/.platformio/packages/framework-arduinoespressif32@src-63eea845228ecc62b8fd85f819107145/cores/esp32/esp32-hal-log.h \
  /Users/douglasl/.platformio/packages/framework-arduinoespressif32@src-63eea845228ecc62b8fd85f819107145/cores/esp32/HardwareI2C.h \
  src/gpio/control_button.h src/gpio/button_led.h src/state/line_state.h \
- src/mqtt/mqtt_client.h \
+ src/gpio/tower_light.h src/mqtt/mqtt_client.h \
  .pio/libdeps/esp32-s3-devkitc-1/PubSubClient/src/PubSubClient.h \
  .pio/libdeps/esp32-s3-devkitc-1/ArduinoJson/src/ArduinoJson.h \
  .pio/libdeps/esp32-s3-devkitc-1/ArduinoJson/src/ArduinoJson.hpp \

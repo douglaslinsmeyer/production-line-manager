@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -243,9 +244,9 @@ func (s *LineService) SetStatus(
 			zap.Error(err))
 	}
 
-	// Send tower light control commands to assigned device
-	if err := s.updateDeviceTowerLights(ctx, line); err != nil {
-		s.logger.Error("failed to update device tower lights",
+	// Send line state command to assigned device
+	if err := s.sendLineStateCommand(ctx, line); err != nil {
+		s.logger.Error("failed to send line state command",
 			zap.String("line_code", line.Code),
 			zap.String("line_id", line.ID.String()),
 			zap.Error(err))
@@ -255,9 +256,8 @@ func (s *LineService) SetStatus(
 	return line, nil
 }
 
-// updateDeviceTowerLights sends output control commands to device assigned to this line
-// Tower light mapping: CH0=Green (on), CH1=Yellow (maintenance), CH2=Red (off/error)
-func (s *LineService) updateDeviceTowerLights(ctx context.Context, line *domain.ProductionLine) error {
+// sendLineStateCommand sends a set_line_state command to device assigned to this line
+func (s *LineService) sendLineStateCommand(ctx context.Context, line *domain.ProductionLine) error {
 	// Get device assigned to this line
 	assignment, err := s.deviceRepo.GetLineAssignment(line.ID)
 	if err != nil {
@@ -271,66 +271,15 @@ func (s *LineService) updateDeviceTowerLights(ctx context.Context, line *domain.
 		return nil
 	}
 
-	s.logger.Info("updating tower lights for assigned device",
+	s.logger.Info("sending line state command to assigned device",
 		zap.String("line_code", line.Code),
 		zap.String("device_mac", assignment.DeviceMAC),
 		zap.String("status", line.Status.String()))
 
-	// Determine which outputs to turn on based on status
-	var greenOn, yellowOn, redOn bool
-
-	switch line.Status {
-	case domain.StatusOn:
-		greenOn = true
-		yellowOn = false
-		redOn = false
-	case domain.StatusMaintenance:
-		greenOn = false
-		yellowOn = true
-		redOn = false
-	case domain.StatusOff:
-		greenOn = false
-		yellowOn = false
-		redOn = true
-	case domain.StatusError:
-		greenOn = false
-		yellowOn = false
-		redOn = true
-	}
-
-	// Send commands to device
-	topic := fmt.Sprintf("devices/%s/command", assignment.DeviceMAC)
-
-	// Command to set green light (CH0)
-	if err := s.sendOutputCommand(topic, 0, greenOn); err != nil {
-		return err
-	}
-
-	// Command to set yellow light (CH1)
-	if err := s.sendOutputCommand(topic, 1, yellowOn); err != nil {
-		return err
-	}
-
-	// Command to set red light (CH2)
-	if err := s.sendOutputCommand(topic, 2, redOn); err != nil {
-		return err
-	}
-
-	s.logger.Info("tower lights updated",
-		zap.String("line_code", line.Code),
-		zap.Bool("green", greenOn),
-		zap.Bool("yellow", yellowOn),
-		zap.Bool("red", redOn))
-
-	return nil
-}
-
-// sendOutputCommand sends a set_output command to a device
-func (s *LineService) sendOutputCommand(topic string, channel int, state bool) error {
+	// Build command - convert status to uppercase for firmware
 	command := map[string]interface{}{
-		"command": "set_output",
-		"channel": channel,
-		"state":   state,
+		"command": "set_line_state",
+		"state":   strings.ToUpper(line.Status.String()),
 	}
 
 	payload, err := json.Marshal(command)
@@ -338,7 +287,17 @@ func (s *LineService) sendOutputCommand(topic string, channel int, state bool) e
 		return fmt.Errorf("failed to marshal command: %w", err)
 	}
 
-	return s.publisher.PublishRaw(topic, payload)
+	// Send to device command topic
+	topic := fmt.Sprintf("devices/%s/command", assignment.DeviceMAC)
+	if err := s.publisher.PublishRaw(topic, payload); err != nil {
+		return fmt.Errorf("failed to publish line state command: %w", err)
+	}
+
+	s.logger.Info("line state command sent",
+		zap.String("line_code", line.Code),
+		zap.String("state", strings.ToUpper(line.Status.String())))
+
+	return nil
 }
 
 // GetStatusHistory retrieves the status change history for a production line
