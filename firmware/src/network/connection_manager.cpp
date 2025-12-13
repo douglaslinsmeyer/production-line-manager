@@ -68,6 +68,7 @@ bool ConnectionManager::begin(const char* mac) {
                 connected = true;
                 // Start always-on configuration web server
                 deviceWebServer->begin(80);
+                deviceWebServer->setConnectionManager(this);
                 return true;
             } else {
                 // Connection failed, WiFiManager will have entered AP mode
@@ -102,6 +103,7 @@ bool ConnectionManager::begin(const char* mac) {
         // Wait a moment for Ethernet to be ready
         delay(500);
         deviceWebServer->begin(80);
+        deviceWebServer->setConnectionManager(this);
 
         return true;
     }

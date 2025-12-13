@@ -87,6 +87,5 @@ private:
 
     // Utility functions
     String formatUptime(unsigned long seconds);
-    String formatRSSI(int rssi);
     bool stateHasChanged();
 };

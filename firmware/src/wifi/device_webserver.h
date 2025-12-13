@@ -4,6 +4,9 @@
 #include <WebServer.h>
 #include "../device_config.h"
 
+// Forward declarations
+class ConnectionManager;
+
 /**
  * Device Web Server
  *
@@ -40,8 +43,16 @@ public:
      */
     bool isRunning() const { return running; }
 
+    /**
+     * Set connection manager reference
+     * Allows web server to access network status and RSSI
+     * @param manager Pointer to ConnectionManager instance
+     */
+    void setConnectionManager(ConnectionManager* manager);
+
 private:
     WebServer* webServer;
+    ConnectionManager* connectionManager;
     bool running;
     uint16_t serverPort;
 

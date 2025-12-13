@@ -2,6 +2,7 @@
 #include "config.h"
 #include "network/connection_manager.h"
 #include "mqtt/mqtt_client.h"
+#include "wifi/wifi_utils.h"
 
 DisplayManager::DisplayManager()
     : display(nullptr),
@@ -156,8 +157,16 @@ void DisplayManager::drawNetworkStatus() {
 
     if (networkManager->getActiveInterface() == ConnectionManager::INTERFACE_WIFI) {
         int rssi = networkManager->getRSSI();
-        display->printf("WiFi: %ddBm ", rssi);
-        display->write(0xFB);  // Checkmark symbol (√)
+
+        if (rssi == 0) {
+            // WiFi disconnected or not connected yet
+            display->print("WiFi: Connecting...");
+        } else {
+            // Connected - show signal bars
+            String bars = WiFiUtils::rssiToBarString(rssi);
+            display->printf("WiFi: %s ", bars.c_str());
+            display->write(0xFB);  // Checkmark symbol (√)
+        }
     } else {
         display->print("Ethernet ");
         display->write(0xFB);  // Checkmark symbol (√)
@@ -236,12 +245,6 @@ String DisplayManager::formatUptime(unsigned long seconds) {
 
     char buffer[16];
     snprintf(buffer, sizeof(buffer), "%02lu:%02lu:%02lu", hours, minutes, secs);
-    return String(buffer);
-}
-
-String DisplayManager::formatRSSI(int rssi) {
-    char buffer[16];
-    snprintf(buffer, sizeof(buffer), "%ddBm", rssi);
     return String(buffer);
 }
 

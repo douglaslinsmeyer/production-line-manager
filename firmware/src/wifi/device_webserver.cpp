@@ -1,11 +1,14 @@
 #include "device_webserver.h"
 #include "config.h"
+#include "wifi_utils.h"
+#include "network/connection_manager.h"
 
 extern DeviceConfig deviceConfig;
 extern char deviceMAC[18];
 
 DeviceWebServer::DeviceWebServer()
     : webServer(nullptr),
+      connectionManager(nullptr),
       running(false),
       serverPort(80) {
 }
@@ -60,6 +63,10 @@ void DeviceWebServer::update() {
     if (webServer && running) {
         webServer->handleClient();
     }
+}
+
+void DeviceWebServer::setConnectionManager(ConnectionManager* manager) {
+    connectionManager = manager;
 }
 
 // HTTP Handlers
@@ -203,8 +210,19 @@ void DeviceWebServer::handleStatus() {
     json += "\"device_id\":\"" + String(deviceMAC) + "\",";
     json += "\"uptime\":" + String(millis() / 1000) + ",";
     json += "\"free_heap\":" + String(ESP.getFreeHeap()) + ",";
-    json += "\"connection_mode\":\"" + String(settings.connectionMode == MODE_WIFI ? "wifi" : "ethernet") + "\",";
-    json += "\"wifi_enabled\":" + String(settings.wifiEnabled ? "true" : "false");
+    json += "\"connection_mode\":\"" + String(settings.connectionMode == MODE_WIFI ? "wifi" : "ethernet") + "\"";
+
+    // Add WiFi signal info if in WiFi mode and connectionManager is available
+    if (settings.connectionMode == MODE_WIFI && connectionManager) {
+        int rssi = connectionManager->getRSSI();
+        json += ",\"wifi_enabled\":" + String(settings.wifiEnabled ? "true" : "false");
+        json += ",\"wifi_rssi\":" + String(rssi);
+        json += ",\"wifi_signal_bars\":" + String(WiFiUtils::rssiToBars(rssi));
+        json += ",\"wifi_signal_quality\":\"" + WiFiUtils::rssiToQuality(rssi) + "\"";
+    } else {
+        json += ",\"wifi_enabled\":" + String(settings.wifiEnabled ? "true" : "false");
+    }
+
     json += "}";
 
     webServer->send(200, "application/json", json);
@@ -369,6 +387,19 @@ String DeviceWebServer::getCSS() {
         font-weight: 600;
         color: #4a5568;
     }
+    .signal-bars {
+        font-size: 18px;
+        font-weight: bold;
+        margin-right: 10px;
+        letter-spacing: 2px;
+    }
+    .signal-bars.signal-good { color: #48bb78; }
+    .signal-bars.signal-fair { color: #ed8936; }
+    .signal-bars.signal-poor { color: #f56565; }
+    .signal-info {
+        font-size: 14px;
+        color: #718096;
+    }
 </style>
 )rawliteral";
 }
@@ -432,6 +463,23 @@ String DeviceWebServer::generateHomePage() {
     if (settings.connectionMode == MODE_WIFI) {
         html += "<tr><td>WiFi SSID</td><td>" + String(settings.wifiSSID) + "</td></tr>";
         html += "<tr><td>WiFi Enabled</td><td>" + String(settings.wifiEnabled ? "Yes" : "No") + "</td></tr>";
+
+        // Add signal strength if WiFi is connected
+        if (connectionManager && connectionManager->isConnected()) {
+            int rssi = connectionManager->getRSSI();
+            String bars = WiFiUtils::rssiToBarString(rssi);
+            String quality = WiFiUtils::rssiToQuality(rssi);
+
+            // Determine color class based on signal strength
+            String colorClass = "signal-good";
+            if (rssi < -70) colorClass = "signal-poor";
+            else if (rssi < -60) colorClass = "signal-fair";
+
+            html += "<tr><td>WiFi Signal</td><td>";
+            html += "<span class='signal-bars " + colorClass + "'>" + bars + "</span>";
+            html += "<span class='signal-info'>" + String(rssi) + " dBm (" + quality + ")</span>";
+            html += "</td></tr>";
+        }
     } else {
         html += "<tr><td>Network Mode</td><td>" + String(settings.useDHCP ? "DHCP" : "Static IP") + "</td></tr>";
         if (!settings.useDHCP) {

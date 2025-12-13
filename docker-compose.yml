@@ -59,6 +59,32 @@ services:
     networks:
       - production-line-network
 
+  # Avahi mDNS Service Discovery
+  # Advertises MQTT broker on Docker network
+  avahi:
+    image: flungo/avahi
+    container_name: production-line-avahi
+    volumes:
+      - ./avahi:/etc/avahi/services:ro
+    networks:
+      - production-line-network
+    restart: unless-stopped
+
+  # mDNS Reflector - Bridges Docker network to host network
+  # Note: On macOS with Docker Desktop, mDNS requires additional setup
+  # due to the VM architecture. See README for development setup.
+  # On Linux hosts, this works out of the box.
+  mdns-reflector:
+    image: ghcr.io/vfreex/mdns-reflector:latest
+    container_name: production-line-mdns-reflector
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    restart: unless-stopped
+    depends_on:
+      - avahi
+
   # Database migrations
   migrate:
     image: migrate/migrate
