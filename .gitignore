@@ -46,3 +46,10 @@ node_modules/
 dist/
 *.local
 package-lock.json
+
+# PlatformIO/Arduino
+.pio/
+.vscode/
+*.elf
+*.bin
+*.map
