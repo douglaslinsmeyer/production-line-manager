@@ -78,7 +78,32 @@ void setup() {
     Serial.printf("Device ID (MAC): %s\n\n", deviceMAC);
 
     // ===================================================================
-    // STEP 4: Initialize Boot Button Handler
+    // STEP 4: Initialize I2C for Display and TCA9554PWR
+    // Note: GPIO41/42 are JTAG pins - hardware JTAG will be disabled
+    // ===================================================================
+    Serial.println("Initializing I2C...");
+    Serial.printf("  I2C SDA: GPIO%d (MTMS - JTAG pin)\n", I2C_SDA_PIN);
+    Serial.printf("  I2C SCL: GPIO%d (MTDI - JTAG pin)\n", I2C_SCL_PIN);
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+    Serial.println("✓ I2C bus initialized");
+    Serial.println("  Note: Hardware JTAG debugging not available");
+    Serial.println("  Use USB Serial/JTAG on GPIO19/20 for debugging\n");
+
+    // ===================================================================
+    // STEP 5: Initialize Display (early for boot feedback)
+    // ===================================================================
+    Serial.println("Initializing OLED display...");
+    if (displayManager.begin()) {
+        Serial.println("✓ Display ready");
+        displayManager.showMessage("Booting...");
+        delay(500);  // Show splash briefly
+    } else {
+        Serial.println("✗ WARNING: Display initialization failed");
+        Serial.println("  System will continue without display\n");
+    }
+
+    // ===================================================================
+    // STEP 6: Initialize Boot Button Handler
     // ===================================================================
     Serial.println("Initializing boot button handler...");
     bootButton.begin();
@@ -87,29 +112,49 @@ void setup() {
     // Check for long press during boot (15s hold to enter AP mode)
     Serial.println("Checking for AP mode trigger (hold BOOT for 15s)...");
     unsigned long bootCheckStart = millis();
+    uint8_t lastSecondsLeft = 255;
+
     while (millis() - bootCheckStart < 15100) {  // Check for 15.1 seconds
         bootButton.update();
-        if (bootButton.longPressDetected()) {
-            Serial.println("\n!!! BOOT BUTTON HELD 15 SECONDS !!!");
-            Serial.println("Entering AP Mode - Clearing WiFi credentials");
 
-            // Clear WiFi credentials and force AP mode
-            deviceConfig.clearWiFiCredentials();
-            deviceConfig.save();
+        if (bootButton.isPressed()) {
+            // User is holding button - show they need to keep holding
+            displayManager.showBootStep("Hold for AP Mode...");
 
-            // Visual feedback
-            Serial.println("Configuration cleared. Device will enter AP mode on boot.\n");
+            if (bootButton.longPressDetected()) {
+                Serial.println("\n!!! BOOT BUTTON HELD 15 SECONDS !!!");
+                Serial.println("Entering AP Mode - Clearing WiFi credentials");
 
-            bootButton.resetLongPress();
-            break;
+                // Visual feedback
+                displayManager.showMessage("AP Mode!");
+                delay(1000);
+
+                // Clear WiFi credentials and force AP mode
+                deviceConfig.clearWiFiCredentials();
+                deviceConfig.save();
+
+                Serial.println("Configuration cleared. Device will enter AP mode on boot.\n");
+                Serial.println("Rebooting in 2 seconds...");
+                delay(2000);
+                ESP.restart();
+            }
+        } else {
+            // Show countdown
+            uint8_t secondsLeft = (15100 - (millis() - bootCheckStart)) / 1000;
+            if (secondsLeft != lastSecondsLeft) {
+                displayManager.showBootCountdown(secondsLeft);
+                lastSecondsLeft = secondsLeft;
+            }
         }
-        delay(10);
+
+        delay(100);
     }
     Serial.println("Boot button check complete\n");
 
     // ===================================================================
-    // STEP 5: Load Device Configuration from NVS
+    // STEP 7: Load Device Configuration from NVS
     // ===================================================================
+    displayManager.showBootStep("Loading config...");
     Serial.println("Loading device configuration from NVS...");
     deviceConfig.begin();
     deviceConfig.printSettings();
@@ -125,18 +170,9 @@ void setup() {
     }
 
     // ===================================================================
-    // STEP 6: Initialize I2C for TCA9554PWR
-    // Note: GPIO41/42 are JTAG pins - hardware JTAG will be disabled
+    // STEP 8: Initialize Digital Outputs
     // ===================================================================
-    Serial.println("Initializing I2C...");
-    Serial.printf("  I2C SDA: GPIO%d (MTMS - JTAG pin)\n", I2C_SDA_PIN);
-    Serial.printf("  I2C SCL: GPIO%d (MTDI - JTAG pin)\n", I2C_SCL_PIN);
-    Serial.println("  Note: Hardware JTAG debugging not available");
-    Serial.println("  Use USB Serial/JTAG on GPIO19/20 for debugging\n");
-
-    // ===================================================================
-    // STEP 7: Initialize Digital Outputs
-    // ===================================================================
+    displayManager.showBootStep("Init outputs...");
     Serial.println("Initializing digital outputs...");
     if (outputs.begin()) {
         Serial.println("✓ Digital outputs ready (all OFF)\n");
@@ -145,29 +181,19 @@ void setup() {
     }
 
     // ===================================================================
-    // STEP 7a: Initialize Display (uses same I2C bus as TCA9554PWR)
-    // ===================================================================
-    Serial.println("Initializing OLED display...");
-    if (displayManager.begin()) {
-        Serial.println("✓ Display ready\n");
-        displayManager.showMessage("Booting...");
-    } else {
-        Serial.println("✗ WARNING: Display initialization failed");
-        Serial.println("  System will continue without display\n");
-    }
-
-    // ===================================================================
-    // STEP 8: Initialize Digital Inputs
+    // STEP 9: Initialize Digital Inputs
     // Note: Will wait additional 50ms before reading to avoid glitches
     // ===================================================================
+    displayManager.showBootStep("Init inputs...");
     Serial.println("Initializing digital inputs...");
     inputs.begin();
     inputs.setCallback(onInputChange);
     Serial.println("✓ Digital inputs configured\n");
 
     // ===================================================================
-    // STEP 9: Initialize Device Identification (LED + Buzzer)
+    // STEP 10: Initialize Device Identification (LED + Buzzer)
     // ===================================================================
+    displayManager.showBootStep("Init peripherals...");
     Serial.println("Initializing device identification...");
     deviceID.begin();
     Serial.println("✓ Device identification ready\n");
@@ -222,6 +248,7 @@ void setup() {
     // STEP 11: Initialize Network (WiFi OR Ethernet)
     // Unified network manager handles interface selection
     // ===================================================================
+    displayManager.showBootStep("Connecting...");
     Serial.println("Initializing network...");
     if (networkManager.begin(deviceMAC)) {
         networkManager.setConnectionCallback(onNetworkConnection);
@@ -229,7 +256,17 @@ void setup() {
         // Wait for connection (30 second timeout)
         Serial.println("Waiting for network connection (30s timeout)...");
         unsigned long timeout = millis() + 30000;
+        uint8_t lastSecondsRemaining = 255;
+
         while (!networkManager.isConnected() && millis() < timeout) {
+            uint8_t secondsRemaining = (timeout - millis()) / 1000;
+            if (secondsRemaining != lastSecondsRemaining) {
+                char msg[32];
+                snprintf(msg, sizeof(msg), "Connecting... %ds", secondsRemaining);
+                displayManager.showBootStep(msg);
+                lastSecondsRemaining = secondsRemaining;
+            }
+
             delay(100);
             networkManager.update();
             bootButton.update();  // Continue monitoring boot button
@@ -279,6 +316,7 @@ void setup() {
     // ===================================================================
     // STEP 12: Initialize MQTT with Device Discovery
     // ===================================================================
+    displayManager.showBootStep("Init MQTT...");
     Serial.println("Initializing MQTT client...");
     mqtt.begin(deviceMAC);  // Use MAC address as device ID
     mqtt.setFlashCallback(onFlashIdentify);
@@ -295,6 +333,7 @@ void setup() {
     // ===================================================================
     // STEP 13: Initialize OTA Manager
     // ===================================================================
+    displayManager.showBootStep("Init OTA...");
     Serial.println("Initializing OTA manager...");
     if (otaManager.begin()) {
         Serial.println("✓ OTA manager ready");
@@ -315,6 +354,7 @@ void setup() {
     // ===================================================================
     // STEP 14: Initialize Device Web Server
     // ===================================================================
+    displayManager.showBootStep("Starting web...");
     Serial.println("Initializing device web server...");
     if (deviceWebServer.begin(80)) {
         deviceWebServer.setConnectionManager(&networkManager);
@@ -335,6 +375,9 @@ void setup() {
     Serial.printf("CPU Frequency: %d MHz\n", ESP.getCpuFreqMHz());
     Serial.printf("Flash Size: %d bytes\n", ESP.getFlashChipSize());
     Serial.printf("Free Heap: %d bytes\n\n", ESP.getFreeHeap());
+
+    // Show normal status display
+    displayManager.forceRefresh();
 }
 
 void loop() {

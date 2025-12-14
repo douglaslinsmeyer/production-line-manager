@@ -144,6 +144,18 @@ public:
      */
     bool isOTAInProgress() const { return otaInProgress; }
 
+    /**
+     * Show boot progress step
+     * @param step Description of current boot step
+     */
+    void showBootStep(const char* step);
+
+    /**
+     * Show boot button countdown
+     * @param seconds Seconds remaining for boot button press
+     */
+    void showBootCountdown(uint8_t seconds);
+
 private:
     Adafruit_SSD1306* display;
     ConnectionManager* networkManager;

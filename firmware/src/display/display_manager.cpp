@@ -408,3 +408,48 @@ void DisplayManager::showOTAError(const char* error) {
 
     otaInProgress = false;
 }
+
+void DisplayManager::showBootStep(const char* step) {
+    if (!displayInitialized || display == nullptr) return;
+
+    display->clearDisplay();
+    display->setTextSize(1);
+    display->setTextColor(SSD1306_WHITE);
+
+    // Device name/version at top
+    display->setCursor(0, 0);
+    display->println(DEVICE_TYPE);
+    display->setCursor(0, 10);
+    display->println(FIRMWARE_VERSION);
+
+    // Current step
+    display->setCursor(0, 28);
+    display->print("> ");
+    display->println(step);
+
+    display->display();
+}
+
+void DisplayManager::showBootCountdown(uint8_t seconds) {
+    if (!displayInitialized || display == nullptr) return;
+
+    display->clearDisplay();
+    display->setTextSize(1);
+    display->setTextColor(SSD1306_WHITE);
+
+    display->setCursor(0, 0);
+    display->println("Press BOOT for");
+    display->setCursor(0, 10);
+    display->println("  AP Mode Setup");
+
+    // Countdown (large font)
+    display->setTextSize(3);
+    display->setCursor(52, 32);
+    display->printf("%2d", seconds);
+
+    display->setTextSize(1);
+    display->setCursor(0, 56);
+    display->println("or wait to continue");
+
+    display->display();
+}
