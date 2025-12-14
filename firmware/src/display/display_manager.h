@@ -8,6 +8,68 @@
 class ConnectionManager;
 class MQTTClientManager;
 
+// WiFi signal strength bitmaps (8x8 pixels)
+// Traditional WiFi icon with radiating arcs
+// 0 bars (no signal - X through icon)
+static const uint8_t WIFI_ICON_0[] PROGMEM = {
+    0b10000001,
+    0b01000010,
+    0b00100100,
+    0b00011000,
+    0b00011000,
+    0b00100100,
+    0b01000010,
+    0b10000001
+};
+
+// 1 bar (poor signal - just dot)
+static const uint8_t WIFI_ICON_1[] PROGMEM = {
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00011000,
+    0b00011000
+};
+
+// 2 bars (fair signal - dot + small arc)
+static const uint8_t WIFI_ICON_2[] PROGMEM = {
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00000000,
+    0b00111100,
+    0b01000010,
+    0b00011000,
+    0b00011000
+};
+
+// 3 bars (good signal - dot + 2 arcs)
+static const uint8_t WIFI_ICON_3[] PROGMEM = {
+    0b00000000,
+    0b00000000,
+    0b01111110,
+    0b10000001,
+    0b00111100,
+    0b01000010,
+    0b00011000,
+    0b00011000
+};
+
+// 4 bars (excellent signal - dot + 3 arcs)
+static const uint8_t WIFI_ICON_4[] PROGMEM = {
+    0b11111111,
+    0b10000001,
+    0b01111110,
+    0b10000001,
+    0b00111100,
+    0b01000010,
+    0b00011000,
+    0b00011000
+};
+
 /**
  * Display Manager
  *
@@ -84,6 +146,7 @@ private:
     void drawUptime();
     void drawAPMode();
     void drawNoNetwork();
+    void drawWiFiIcon(int16_t x, int16_t y, uint8_t bars);
 
     // Utility functions
     String formatUptime(unsigned long seconds);

@@ -162,14 +162,19 @@ void DisplayManager::drawNetworkStatus() {
             // WiFi disconnected or not connected yet
             display->print("WiFi: Connecting...");
         } else {
-            // Connected - show signal bars
-            String bars = WiFiUtils::rssiToBarString(rssi);
-            display->printf("WiFi: %s ", bars.c_str());
-            display->write(0xFB);  // Checkmark symbol (√)
+            // Connected - show WiFi icon with signal bars
+            display->print("WiFi: ");
+
+            // Get cursor position to draw icon after text
+            int16_t x = display->getCursorX();
+            int16_t y = display->getCursorY();
+
+            // Draw WiFi signal icon
+            uint8_t bars = WiFiUtils::rssiToBars(rssi);
+            drawWiFiIcon(x, y, bars);
         }
     } else {
-        display->print("Ethernet ");
-        display->write(0xFB);  // Checkmark symbol (√)
+        display->print("Ethernet OK");
     }
 }
 
@@ -274,4 +279,31 @@ bool DisplayManager::stateHasChanged() {
     }
 
     return changed;
+}
+
+void DisplayManager::drawWiFiIcon(int16_t x, int16_t y, uint8_t bars) {
+    const uint8_t* icon;
+
+    // Select appropriate icon based on signal strength
+    switch (bars) {
+        case 0:
+            icon = WIFI_ICON_0;
+            break;
+        case 1:
+            icon = WIFI_ICON_1;
+            break;
+        case 2:
+            icon = WIFI_ICON_2;
+            break;
+        case 3:
+            icon = WIFI_ICON_3;
+            break;
+        case 4:
+        default:
+            icon = WIFI_ICON_4;
+            break;
+    }
+
+    // Draw the bitmap (8x8 pixels)
+    display->drawBitmap(x, y, icon, 8, 8, SSD1306_WHITE);
 }
