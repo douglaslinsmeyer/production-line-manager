@@ -9,7 +9,10 @@ WiFiManager::WiFiManager()
       connCallback(nullptr),
       lastReconnectAttempt(0),
       reconnectDelay(WIFI_RECONNECT_INITIAL_DELAY),
-      reconnectAttempts(0) {
+      reconnectAttempts(0),
+      connectionState(STATE_IDLE),
+      connectionStartTime(0),
+      connectionTimeout(0) {
 
     instance = this;
 }
@@ -27,56 +30,32 @@ bool WiFiManager::begin() {
 }
 
 bool WiFiManager::connectSTA(const char* ssid, const char* password, uint32_t timeout) {
-    Serial.printf("Connecting to WiFi: %s\n", ssid);
+    Serial.printf("Starting WiFi connection: %s\n", ssid);
 
     // Stop any existing connection
     if (currentMode != MODE_OFF) {
         WiFi.disconnect(true);
-        delay(100);
+        delay(100);  // Keep short delay for WiFi state transition
     }
 
     // Store credentials for reconnection
     staSsid = String(ssid);
     staPassword = String(password);
 
-    // Set mode and begin connection
+    // Begin async connection
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
 
     currentMode = MODE_STA;
     connected = false;
 
-    // Wait for connection with timeout
-    unsigned long startTime = millis();
-    while (!connected && (millis() - startTime) < timeout) {
-        delay(100);
+    // Set state for timeout tracking
+    connectionState = STATE_CONNECTING;
+    connectionStartTime = millis();
+    connectionTimeout = timeout;
 
-        if (WiFi.status() == WL_CONNECTED) {
-            connected = true;
-            Serial.println("✓ WiFi connected");
-            Serial.printf("  IP Address: %s\n", WiFi.localIP().toString().c_str());
-            Serial.printf("  RSSI: %d dBm\n", WiFi.RSSI());
-
-            // Reset reconnection state
-            reconnectAttempts = 0;
-            reconnectDelay = WIFI_RECONNECT_INITIAL_DELAY;
-
-            if (connCallback) {
-                connCallback(true);
-            }
-
-            return true;
-        }
-    }
-
-    // Connection failed
-    Serial.println("✗ WiFi connection timeout");
-    Serial.println("  Entering AP mode for setup...");
-
-    // Enter AP mode as fallback
-    enterAPMode();
-
-    return false;
+    Serial.println("Connection started (non-blocking) - will complete via events");
+    return true;  // Returns immediately - connection happens via events
 }
 
 bool WiFiManager::startAP(const char* ssid, const char* password) {
@@ -149,8 +128,19 @@ void WiFiManager::stop() {
 }
 
 void WiFiManager::update() {
-    // Only handle reconnection in STA mode
-    if (currentMode == MODE_STA && !connected) {
+    // Check for initial connection timeout
+    if (connectionState == STATE_CONNECTING) {
+        if (millis() - connectionStartTime > connectionTimeout) {
+            Serial.println("✗ WiFi connection timeout");
+            Serial.println("  Entering AP mode for setup...");
+            connectionState = STATE_FAILED;
+            enterAPMode();
+        }
+        return;  // Event will handle success transition
+    }
+
+    // Only handle reconnection in STA mode after initial connection
+    if (currentMode == MODE_STA && !connected && connectionState == STATE_CONNECTED) {
         // Check if it's time to attempt reconnection
         if (millis() - lastReconnectAttempt > reconnectDelay) {
             lastReconnectAttempt = millis();
@@ -209,6 +199,10 @@ String WiFiManager::getMACAddress() {
     return WiFi.macAddress();
 }
 
+bool WiFiManager::isConnecting() const {
+    return (connectionState == STATE_CONNECTING);
+}
+
 void WiFiManager::onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     if (instance == nullptr) return;
 
@@ -219,9 +213,13 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
 
         case ARDUINO_EVENT_WIFI_STA_GOT_IP:
             Serial.println("WiFi event: GOT_IP");
+            instance->connectionState = STATE_CONNECTED;  // Update state
             instance->connected = true;
             instance->reconnectAttempts = 0;
             instance->reconnectDelay = WIFI_RECONNECT_INITIAL_DELAY;
+
+            Serial.printf("  IP Address: %s\n", WiFi.localIP().toString().c_str());
+            Serial.printf("  RSSI: %d dBm\n", WiFi.RSSI());
 
             if (instance->connCallback) {
                 instance->connCallback(true);

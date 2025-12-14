@@ -95,7 +95,23 @@ public:
      */
     String getMACAddress();
 
+    /**
+     * Check if currently connecting (initial connection attempt)
+     * @return true if connection in progress
+     */
+    bool isConnecting() const;
+
 private:
+    enum ConnectionState {
+        STATE_IDLE,
+        STATE_CONNECTING,
+        STATE_CONNECTED,
+        STATE_FAILED
+    };
+
+    ConnectionState connectionState;
+    unsigned long connectionStartTime;
+    uint32_t connectionTimeout;
     Mode currentMode;
     bool connected;
     WiFiConnectionCallback connCallback;
