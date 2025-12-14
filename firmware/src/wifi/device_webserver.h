@@ -6,6 +6,7 @@
 
 // Forward declarations
 class ConnectionManager;
+class OTAManager;
 
 /**
  * Device Web Server
@@ -50,11 +51,20 @@ public:
      */
     void setConnectionManager(ConnectionManager* manager);
 
+    /**
+     * Set OTA manager reference
+     * Allows web server to handle firmware updates
+     * @param manager Pointer to OTAManager instance
+     */
+    void setOTAManager(OTAManager* manager);
+
 private:
     WebServer* webServer;
     ConnectionManager* connectionManager;
+    OTAManager* otaManager;
     bool running;
     uint16_t serverPort;
+    unsigned long otaStartTime;
 
     // HTTP request handlers
     void handleRoot();
@@ -72,6 +82,12 @@ private:
     void handleStatus();
     void handleNotFound();
 
+    // OTA handlers
+    void handleOTAPage();
+    void handleOTAUpload();
+    void handleOTAUploadData();
+    void handleOTAProgress();
+
     // HTML page generation
     String generateHomePage();
     String generateConfigPage();
@@ -79,6 +95,7 @@ private:
     String generateEthernetPage();
     String generateMQTTPage();
     String generateDevicePage();
+    String generateOTAPage();
 
     // Shared HTML components
     String getHTMLHeader(const char* title);

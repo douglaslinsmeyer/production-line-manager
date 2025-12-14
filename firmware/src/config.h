@@ -84,5 +84,12 @@
 #define DISPLAY_HEIGHT 64                 // OLED display height in pixels
 #define DISPLAY_REFRESH_INTERVAL 2000     // Display refresh interval (2s)
 
+// OTA Update Configuration
+#define OTA_BUFFER_SIZE 1024              // Upload chunk size (bytes)
+#define OTA_TIMEOUT_MS 300000             // 5 minute upload timeout
+#define OTA_MAX_SIZE 3400000              // Max firmware size (3.4 MB)
+#define OTA_BOOT_COUNT_THRESHOLD 3        // Rollback warning threshold
+#define OTA_BOOT_VALIDATION_DELAY 60000   // 60s delay before marking boot valid
+
 // Hardware Configuration (from platformio.ini build_flags)
 // Pin definitions are in build_flags - no need to redefine here

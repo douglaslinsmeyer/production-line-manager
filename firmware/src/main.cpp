@@ -13,6 +13,8 @@
 #include "mqtt/mqtt_client.h"
 #include "identification.h"
 #include "state/line_state.h"
+#include "ota/ota_manager.h"
+#include "wifi/device_webserver.h"
 
 // Global managers
 ConnectionManager networkManager;
@@ -27,6 +29,8 @@ ButtonLED buttonLED(&outputs);
 TowerLightManager towerLight(&outputs);
 StatusLEDController statusLED(&outputs);
 DisplayManager displayManager;
+OTAManager otaManager;
+DeviceWebServer deviceWebServer;
 
 // Device identification (MAC address)
 char deviceMAC[18];  // Format: "XX:XX:XX:XX:XX:XX"
@@ -42,6 +46,7 @@ void onBootButtonLongPress(uint32_t duration);
 void onLineStateChange(LineState oldState, LineState newState);
 void onControlButtonShortPress();
 void onControlButtonLongPress();
+void onOTAProgress(uint8_t percent, OTAManager::OTAState state);
 String getMACAddress();
 
 void setup() {
@@ -287,6 +292,39 @@ void setup() {
         mqtt.connect();
     }
 
+    // ===================================================================
+    // STEP 13: Initialize OTA Manager
+    // ===================================================================
+    Serial.println("Initializing OTA manager...");
+    if (otaManager.begin()) {
+        Serial.println("✓ OTA manager ready");
+        uint32_t bootCount = otaManager.getBootCount();
+        Serial.printf("  Boot count: %u\n", bootCount);
+
+        if (otaManager.isRollbackNeeded()) {
+            Serial.println("⚠ WARNING: Multiple boot failures detected!");
+            Serial.println("  Consider rolling back firmware");
+        }
+
+        // Set progress callback
+        otaManager.setProgressCallback(onOTAProgress);
+    } else {
+        Serial.println("✗ WARNING: OTA manager initialization failed");
+    }
+
+    // ===================================================================
+    // STEP 14: Initialize Device Web Server
+    // ===================================================================
+    Serial.println("Initializing device web server...");
+    if (deviceWebServer.begin(80)) {
+        deviceWebServer.setConnectionManager(&networkManager);
+        deviceWebServer.setOTAManager(&otaManager);
+        Serial.println("✓ Device web server running on port 80");
+        Serial.printf("  Access at: http://%s\n", networkManager.getIP().toString().c_str());
+    } else {
+        Serial.println("✗ WARNING: Device web server failed to start");
+    }
+
     Serial.println("\n==============================================");
     Serial.println("  Initialization Complete");
     Serial.println("==============================================\n");
@@ -304,8 +342,30 @@ void loop() {
     // Main Loop - runs continuously
     // ===================================================================
 
-    // Update network manager (WiFi or Ethernet)
+    // Update network manager (WiFi or Ethernet) - always runs
     networkManager.update();
+
+    // Update web server (handles HTTP requests) - always runs
+    deviceWebServer.update();
+
+    // Check if OTA is in progress - skip GPIO/MQTT operations during update
+    if (otaManager.getState() == OTAManager::OTA_IN_PROGRESS) {
+        // Only update display and status LED during OTA
+        displayManager.update();
+        statusLED.update();
+        delay(10);  // Keep watchdog happy
+        return;  // Skip all GPIO/MQTT operations
+    }
+
+    // Mark boot as valid after stable operation
+    static bool bootValidated = false;
+    if (!bootValidated && millis() > OTA_BOOT_VALIDATION_DELAY) {
+        if (networkManager.isConnected() && mqtt.isConnected()) {
+            otaManager.markValidBoot();
+            bootValidated = true;
+            Serial.println("✓ Boot validated - system stable");
+        }
+    }
 
     // Update device identification (LED patterns)
     deviceID.update();
@@ -409,6 +469,18 @@ void onFlashIdentify() {
 
     // Flash device for 10 seconds
     deviceID.flashIdentify(10);
+}
+
+void onOTAProgress(uint8_t percent, OTAManager::OTAState state) {
+    // Update display with progress
+    displayManager.showOTAProgress(percent);
+
+    // Handle completion states
+    if (state == OTAManager::OTA_SUCCESS) {
+        displayManager.showOTAComplete();
+    } else if (state == OTAManager::OTA_ERROR) {
+        displayManager.showOTAError(otaManager.getErrorString());
+    }
 }
 
 String getMACAddress() {

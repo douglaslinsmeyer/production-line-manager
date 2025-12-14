@@ -2,6 +2,7 @@
 #include "config.h"
 #include "wifi_utils.h"
 #include "network/connection_manager.h"
+#include "ota/ota_manager.h"
 
 extern DeviceConfig deviceConfig;
 extern char deviceMAC[18];
@@ -9,8 +10,10 @@ extern char deviceMAC[18];
 DeviceWebServer::DeviceWebServer()
     : webServer(nullptr),
       connectionManager(nullptr),
+      otaManager(nullptr),
       running(false),
-      serverPort(80) {
+      serverPort(80),
+      otaStartTime(0) {
 }
 
 DeviceWebServer::~DeviceWebServer() {
@@ -38,6 +41,15 @@ bool DeviceWebServer::begin(uint16_t port) {
     webServer->on("/reboot", HTTP_POST, [this]() { handleReboot(); });
     webServer->on("/reset", HTTP_POST, [this]() { handleReset(); });
     webServer->on("/status", [this]() { handleStatus(); });
+
+    // OTA update endpoints
+    webServer->on("/update", HTTP_GET, [this]() { handleOTAPage(); });
+    webServer->on("/update", HTTP_POST,
+        [this]() { handleOTAUpload(); },        // Called when upload complete
+        [this]() { handleOTAUploadData(); }     // Called for each chunk
+    );
+    webServer->on("/ota/progress", [this]() { handleOTAProgress(); });
+
     webServer->onNotFound([this]() { handleNotFound(); });
 
     webServer->begin();
@@ -67,6 +79,10 @@ void DeviceWebServer::update() {
 
 void DeviceWebServer::setConnectionManager(ConnectionManager* manager) {
     connectionManager = manager;
+}
+
+void DeviceWebServer::setOTAManager(OTAManager* manager) {
+    otaManager = manager;
 }
 
 // HTTP Handlers
@@ -818,6 +834,314 @@ String DeviceWebServer::generateDevicePage() {
     html += "}";
     html += "</script>";
 
+    html += getHTMLFooter();
+    return html;
+}
+
+// =============================================================================
+// OTA Update Handlers
+// =============================================================================
+
+void DeviceWebServer::handleOTAPage() {
+    webServer->send(200, "text/html", generateOTAPage());
+}
+
+void DeviceWebServer::handleOTAUploadData() {
+    if (!otaManager) {
+        webServer->send(500, "application/json",
+            "{\"success\":false,\"message\":\"OTA manager not initialized\"}");
+        return;
+    }
+
+    HTTPUpload& upload = webServer->upload();
+    static unsigned long lastChunkTime = 0;
+
+    if (upload.status == UPLOAD_FILE_START) {
+        Serial.printf("OTA: Starting upload: %s\n", upload.filename.c_str());
+        otaStartTime = millis();
+        lastChunkTime = millis();
+
+        // Get content length from HTTP header
+        size_t contentLength = webServer->header("Content-Length").toInt();
+        if (contentLength == 0) {
+            Serial.println("OTA: ERROR - No content length in request");
+            return;
+        }
+
+        // Get MD5 from form data if provided
+        String md5 = webServer->hasArg("md5") ? webServer->arg("md5") : "";
+
+        if (!otaManager->startUpdate(contentLength,
+                                     md5.length() == 32 ? md5.c_str() : nullptr)) {
+            Serial.printf("OTA: Start failed: %s\n", otaManager->getErrorString());
+            return;
+        }
+    }
+    else if (upload.status == UPLOAD_FILE_WRITE) {
+        // Check chunk timeout
+        if (millis() - lastChunkTime > 30000) {  // 30s between chunks
+            Serial.println("OTA: Chunk timeout - aborting");
+            otaManager->abortUpdate();
+            return;
+        }
+
+        // Check total timeout
+        if (millis() - otaStartTime > OTA_TIMEOUT_MS) {
+            Serial.println("OTA: Total timeout - aborting");
+            otaManager->abortUpdate();
+            return;
+        }
+
+        lastChunkTime = millis();
+
+        // Write chunk
+        if (!otaManager->writeChunk(upload.buf, upload.currentSize)) {
+            Serial.printf("OTA: Write failed at %u bytes\n",
+                         otaManager->getBytesWritten());
+            otaManager->abortUpdate();
+            return;
+        }
+    }
+    else if (upload.status == UPLOAD_FILE_END) {
+        if (otaManager->finishUpdate()) {
+            Serial.println("OTA: Update successful!");
+        } else {
+            Serial.printf("OTA: Finish failed: %s\n",
+                         otaManager->getErrorString());
+        }
+    }
+    else if (upload.status == UPLOAD_FILE_ABORTED) {
+        Serial.println("OTA: Upload aborted by client");
+        otaManager->abortUpdate();
+    }
+}
+
+void DeviceWebServer::handleOTAUpload() {
+    if (!otaManager) {
+        webServer->send(500, "application/json",
+            "{\"success\":false,\"message\":\"OTA manager not initialized\"}");
+        return;
+    }
+
+    // Called after upload completes
+    OTAManager::OTAState state = otaManager->getState();
+
+    if (state == OTAManager::OTA_SUCCESS) {
+        webServer->send(200, "application/json",
+            "{\"success\":true,\"message\":\"Update successful! Rebooting in 5 seconds...\"}");
+
+        delay(5000);
+        ESP.restart();
+    } else {
+        String json = "{\"success\":false,\"message\":\"";
+        json += otaManager->getErrorString();
+        json += "\"}";
+        webServer->send(500, "application/json", json);
+    }
+}
+
+void DeviceWebServer::handleOTAProgress() {
+    if (!otaManager) {
+        webServer->send(500, "application/json",
+            "{\"error\":\"OTA not initialized\"}");
+        return;
+    }
+
+    OTAManager::OTAState state = otaManager->getState();
+    uint8_t progress = otaManager->getProgressPercent();
+    size_t bytesWritten = otaManager->getBytesWritten();
+    size_t totalSize = otaManager->getTotalSize();
+
+    // Calculate upload speed
+    unsigned long elapsed = (millis() - otaStartTime) / 1000;  // seconds
+    float speedKBps = elapsed > 0 ? (bytesWritten / 1024.0) / elapsed : 0;
+
+    // Calculate ETA
+    size_t remaining = totalSize - bytesWritten;
+    unsigned long etaSeconds = speedKBps > 0 ? (remaining / 1024) / speedKBps : 0;
+
+    // Build JSON response
+    String json = "{";
+    json += "\"state\":\"" + otaManager->getStateString() + "\",";
+    json += "\"progress\":" + String(progress) + ",";
+    json += "\"bytesWritten\":" + String(bytesWritten) + ",";
+    json += "\"totalSize\":" + String(totalSize) + ",";
+    json += "\"speedKBps\":" + String(speedKBps, 2) + ",";
+    json += "\"etaSeconds\":" + String(etaSeconds);
+
+    if (state == OTAManager::OTA_ERROR) {
+        json += ",\"error\":\"" + String(otaManager->getErrorString()) + "\"";
+    }
+
+    json += "}";
+
+    webServer->send(200, "application/json", json);
+}
+
+String DeviceWebServer::generateOTAPage() {
+    uint32_t bootCount = otaManager ? otaManager->getBootCount() : 0;
+
+    String html = getHTMLHeader("Firmware Update");
+    html += "<div class='container'>";
+    html += getNavigation();
+
+    // Show warning if boot count is high
+    if (bootCount >= OTA_BOOT_COUNT_THRESHOLD) {
+        html += "<div style='background:#fed7d7; border-left:4px solid #f56565; padding:15px; margin-bottom:20px; border-radius:4px'>";
+        html += "⚠️ <strong>WARNING:</strong> Multiple boot failures detected!<br>";
+        html += "Boot count: " + String(bootCount) + " (threshold: " + String(OTA_BOOT_COUNT_THRESHOLD) + ")<br>";
+        html += "Recent firmware may be unstable. Consider rolling back.";
+        html += "</div>";
+    }
+
+    // Warning box
+    html += "<div style='background:#fef3c7; border-left:4px solid #f59e0b; padding:15px; margin-bottom:20px; border-radius:4px'>";
+    html += "⚠️ <strong>WARNING:</strong> Do not disconnect power during update!<br>";
+    html += "Current firmware: " + String(FIRMWARE_VERSION) + "<br>";
+    html += "Update will take approximately 15-30 seconds.";
+    html += "</div>";
+
+    // System info card
+    html += "<div class='card'>";
+    html += "<h2>Current Firmware</h2>";
+    html += "<table>";
+    html += "<tr><td><strong>Version</strong></td><td>" + String(FIRMWARE_VERSION) + "</td></tr>";
+    html += "<tr><td><strong>Device Type</strong></td><td>" + String(DEVICE_TYPE) + "</td></tr>";
+    html += "<tr><td><strong>Boot Count</strong></td><td>" + String(bootCount) + "</td></tr>";
+    html += "<tr><td><strong>Uptime</strong></td><td>" + String(millis() / 1000) + " seconds</td></tr>";
+    html += "</table>";
+    html += "</div>";
+
+    // Upload form
+    html += "<div class='card'>";
+    html += "<h2>Upload New Firmware</h2>";
+    html += "<form id='uploadForm' onsubmit='return false;'>";
+
+    html += "<div style='margin-bottom:15px'>";
+    html += "<label style='display:block; margin-bottom:5px; font-weight:600'>Firmware File (.bin):</label>";
+    html += "<input type='file' id='firmwareFile' accept='.bin' required style='width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:4px'>";
+    html += "</div>";
+
+    html += "<div style='margin-bottom:15px'>";
+    html += "<label style='display:block; margin-bottom:5px; font-weight:600'>MD5 Checksum (optional but recommended):</label>";
+    html += "<input type='text' id='md5sum' name='md5' placeholder='32-character hexadecimal hash' ";
+    html += "pattern='[a-fA-F0-9]{32}' maxlength='32' style='width:100%; padding:8px; border:1px solid #e2e8f0; border-radius:4px'>";
+    html += "<small style='color:#718096; display:block; margin-top:5px'>";
+    html += "Verifies firmware integrity. Generate with: <code>md5sum firmware.bin</code>";
+    html += "</small>";
+    html += "</div>";
+
+    html += "<button type='button' class='btn btn-success' onclick='uploadFirmware()' style='width:100%'>Start Update</button>";
+    html += "</form>";
+    html += "</div>";
+
+    // Progress card (hidden initially)
+    html += "<div id='progressCard' class='card' style='display:none'>";
+    html += "<h2>Update Progress</h2>";
+
+    // Progress bar
+    html += "<div style='background:#eee; height:40px; border-radius:8px; overflow:hidden; margin-bottom:15px'>";
+    html += "<div id='progressBar' style='background:linear-gradient(90deg, #667eea, #764ba2); height:100%; width:0%; transition:width 0.5s ease'></div>";
+    html += "</div>";
+
+    // Percentage
+    html += "<div id='progressText' style='text-align:center; font-size:32px; font-weight:bold; color:#667eea; margin-bottom:20px'>0%</div>";
+
+    // Statistics
+    html += "<div style='display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:20px'>";
+    html += "<div style='text-align:center; padding:15px; background:#f7fafc; border-radius:6px'>";
+    html += "<div style='font-size:12px; color:#718096; margin-bottom:5px'>Upload Speed</div>";
+    html += "<div id='speed' style='font-size:20px; font-weight:bold; color:#667eea'>-- KB/s</div>";
+    html += "</div>";
+    html += "<div style='text-align:center; padding:15px; background:#f7fafc; border-radius:6px'>";
+    html += "<div style='font-size:12px; color:#718096; margin-bottom:5px'>Time Remaining</div>";
+    html += "<div id='eta' style='font-size:20px; font-weight:bold; color:#667eea'>--:--</div>";
+    html += "</div>";
+    html += "</div>";
+
+    // Bytes progress
+    html += "<div style='text-align:center; font-size:14px; color:#718096; margin-bottom:15px'>";
+    html += "<span id='bytesWritten'>0</span> / <span id='totalBytes'>0</span> bytes";
+    html += "</div>";
+
+    // Status message
+    html += "<div id='statusText' style='text-align:center; padding:15px; border-radius:6px; background:#ebf8ff; color:#2c5282'></div>";
+    html += "</div>";
+
+    // JavaScript
+    html += "<script>";
+    html += "let progressInterval = null;";
+
+    html += "function uploadFirmware() {";
+    html += "  const fileInput = document.getElementById('firmwareFile');";
+    html += "  const md5Input = document.getElementById('md5sum');";
+    html += "  if (!fileInput.files.length) { alert('Please select a firmware file'); return; }";
+
+    html += "  document.getElementById('uploadForm').style.display = 'none';";
+    html += "  document.getElementById('progressCard').style.display = 'block';";
+    html += "  document.getElementById('statusText').innerText = 'Starting upload...';";
+
+    html += "  const formData = new FormData();";
+    html += "  formData.append('firmware', fileInput.files[0]);";
+    html += "  if (md5Input.value.length === 32) {";
+    html += "    formData.append('md5', md5Input.value.toLowerCase());";
+    html += "  }";
+
+    html += "  progressInterval = setInterval(updateProgress, 500);";
+
+    html += "  fetch('/update', { method: 'POST', body: formData })";
+    html += "    .then(r => r.json())";
+    html += "    .then(d => {";
+    html += "      clearInterval(progressInterval);";
+    html += "      const statusEl = document.getElementById('statusText');";
+    html += "      if (d.success) {";
+    html += "        statusEl.style.background = '#c6f6d5';";
+    html += "        statusEl.style.color = '#22543d';";
+    html += "        statusEl.innerHTML = '✓ ' + d.message;";
+    html += "      } else {";
+    html += "        statusEl.style.background = '#fed7d7';";
+    html += "        statusEl.style.color = '#742a2a';";
+    html += "        statusEl.innerHTML = '✗ Error: ' + d.message;";
+    html += "      }";
+    html += "    })";
+    html += "    .catch(e => {";
+    html += "      clearInterval(progressInterval);";
+    html += "      const statusEl = document.getElementById('statusText');";
+    html += "      statusEl.style.background = '#fed7d7';";
+    html += "      statusEl.style.color = '#742a2a';";
+    html += "      statusEl.innerHTML = '✗ Upload failed: ' + e;";
+    html += "    });";
+    html += "}";
+
+    html += "function updateProgress() {";
+    html += "  fetch('/ota/progress')";
+    html += "    .then(r => r.json())";
+    html += "    .then(d => {";
+    html += "      document.getElementById('progressBar').style.width = d.progress + '%';";
+    html += "      document.getElementById('progressText').textContent = d.progress + '%';";
+    html += "      document.getElementById('speed').textContent = d.speedKBps.toFixed(1) + ' KB/s';";
+    html += "      const mins = Math.floor(d.etaSeconds / 60);";
+    html += "      const secs = d.etaSeconds % 60;";
+    html += "      document.getElementById('eta').textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;";
+    html += "      document.getElementById('bytesWritten').textContent = (d.bytesWritten / 1024).toFixed(1) + ' KB';";
+    html += "      document.getElementById('totalBytes').textContent = (d.totalSize / 1024).toFixed(1) + ' KB';";
+    html += "      if (d.state === 'in_progress') {";
+    html += "        document.getElementById('statusText').innerText = 'Uploading firmware...';";
+    html += "      } else if (d.state === 'success') {";
+    html += "        document.getElementById('statusText').innerText = 'Finalizing update...';";
+    html += "      } else if (d.state === 'error') {";
+    html += "        clearInterval(progressInterval);";
+    html += "        const statusEl = document.getElementById('statusText');";
+    html += "        statusEl.style.background = '#fed7d7';";
+    html += "        statusEl.style.color = '#742a2a';";
+    html += "        statusEl.innerText = '✗ Error: ' + d.error;";
+    html += "      }";
+    html += "    })";
+    html += "    .catch(e => console.error('Progress fetch error:', e));";
+    html += "}";
+    html += "</script>";
+
+    html += "</div>";
     html += getHTMLFooter();
     return html;
 }

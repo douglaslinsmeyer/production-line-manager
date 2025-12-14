@@ -14,7 +14,10 @@ DisplayManager::DisplayManager()
       lastIPAddress(""),
       lastNetworkConnected(false),
       lastMQTTConnected(false),
-      lastRSSI(0) {
+      lastRSSI(0),
+      otaInProgress(false),
+      lastOTAPercent(0),
+      lastOTAUpdate(0) {
 }
 
 DisplayManager::~DisplayManager() {
@@ -57,6 +60,11 @@ bool DisplayManager::begin() {
 void DisplayManager::update() {
     // Skip if display not initialized
     if (!displayInitialized || display == nullptr) {
+        return;
+    }
+
+    // Skip normal updates during OTA
+    if (otaInProgress) {
         return;
     }
 
@@ -306,4 +314,97 @@ void DisplayManager::drawWiFiIcon(int16_t x, int16_t y, uint8_t bars) {
 
     // Draw the bitmap (8x8 pixels)
     display->drawBitmap(x, y, icon, 8, 8, SSD1306_WHITE);
+}
+
+void DisplayManager::showOTAProgress(uint8_t percent) {
+    if (!displayInitialized || display == nullptr) return;
+
+    // Throttle updates (every 1 second)
+    if (millis() - lastOTAUpdate < 1000 && percent != lastOTAPercent) {
+        return;
+    }
+
+    otaInProgress = true;
+    lastOTAPercent = percent;
+    lastOTAUpdate = millis();
+
+    display->clearDisplay();
+    display->setTextSize(1);
+    display->setTextColor(SSD1306_WHITE);
+
+    // Title
+    display->setCursor(10, 0);
+    display->println("FIRMWARE UPDATE");
+
+    // Progress bar (100px wide, 14px tall)
+    int barX = 14;
+    int barY = 20;
+    int barWidth = 100;
+    int barHeight = 14;
+
+    display->drawRect(barX, barY, barWidth, barHeight, SSD1306_WHITE);
+    int fillWidth = ((percent * (barWidth - 2)) / 100);
+    display->fillRect(barX + 1, barY + 1, fillWidth, barHeight - 2, SSD1306_WHITE);
+
+    // Percentage (large font)
+    display->setTextSize(3);
+    display->setCursor(38, 38);
+    display->printf("%2d%%", percent);
+
+    // Warning message
+    display->setTextSize(1);
+    display->setCursor(6, 56);
+    display->println("DO NOT POWER OFF!");
+
+    display->display();
+}
+
+void DisplayManager::showOTAComplete() {
+    if (!displayInitialized || display == nullptr) return;
+
+    display->clearDisplay();
+    display->setTextSize(2);
+    display->setTextColor(SSD1306_WHITE);
+
+    // Success symbol
+    display->setCursor(52, 10);
+    display->println("OK");
+
+    display->setTextSize(2);
+    display->setCursor(16, 30);
+    display->println("UPDATE");
+    display->setCursor(10, 48);
+    display->println("SUCCESS!");
+
+    display->display();
+
+    otaInProgress = false;
+}
+
+void DisplayManager::showOTAError(const char* error) {
+    if (!displayInitialized || display == nullptr) return;
+
+    display->clearDisplay();
+    display->setTextSize(2);
+    display->setTextColor(SSD1306_WHITE);
+
+    // Error symbol
+    display->setCursor(52, 10);
+    display->println("X");
+
+    display->setTextSize(1);
+    display->setCursor(0, 30);
+    display->println("UPDATE FAILED:");
+
+    display->setCursor(0, 42);
+    // Truncate error message to fit
+    String errorMsg = String(error);
+    if (errorMsg.length() > 21) {
+        errorMsg = errorMsg.substring(0, 18) + "...";
+    }
+    display->println(errorMsg);
+
+    display->display();
+
+    otaInProgress = false;
 }

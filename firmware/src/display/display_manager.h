@@ -121,6 +121,29 @@ public:
      */
     void showMessage(const char* message);
 
+    /**
+     * Show OTA update progress on display
+     * @param percent Progress percentage (0-100)
+     */
+    void showOTAProgress(uint8_t percent);
+
+    /**
+     * Show OTA update complete message
+     */
+    void showOTAComplete();
+
+    /**
+     * Show OTA error message
+     * @param error Error message string
+     */
+    void showOTAError(const char* error);
+
+    /**
+     * Check if OTA is in progress
+     * @return true if OTA update is being displayed
+     */
+    bool isOTAInProgress() const { return otaInProgress; }
+
 private:
     Adafruit_SSD1306* display;
     ConnectionManager* networkManager;
@@ -135,6 +158,11 @@ private:
     bool lastNetworkConnected;
     bool lastMQTTConnected;
     int lastRSSI;
+
+    // OTA state tracking
+    bool otaInProgress;
+    uint8_t lastOTAPercent;
+    unsigned long lastOTAUpdate;
 
     // Refresh display content based on current state
     void refreshDisplay();
