@@ -186,6 +186,12 @@ bool DeviceConfig::clearWiFiCredentials() {
     return save();
 }
 
+bool DeviceConfig::clearWiFiAPMode() {
+    settings.wifiAPMode = false;
+    Serial.println("AP mode flag cleared - device will boot in normal mode");
+    return save();
+}
+
 bool DeviceConfig::enableWiFi(bool enable) {
     settings.wifiEnabled = enable;
     settings.connectionMode = enable ? MODE_WIFI : MODE_ETHERNET;

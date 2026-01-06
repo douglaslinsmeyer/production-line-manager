@@ -76,11 +76,21 @@ static const uint8_t WIFI_ICON_4[] PROGMEM = {
  * Controls SSD1306 OLED display (128x64) to show real-time network
  * and connectivity status information.
  *
- * Display Layout:
- * - Line 0: IP address (large font, 16px)
- * - Line 2: Network type + signal strength + status
- * - Line 3: MQTT connection status
- * - Line 4: System uptime
+ * Display Modes:
+ * 1. Boot: "Booting..." splash during initialization
+ * 2. Status: Unified screen for all operational states (online/offline)
+ *    - Line 0: IP address or "Not Connected"
+ *    - Line 2: Network type + signal/status (Connected/Connecting/Disconnected)
+ *    - Line 3: MQTT connection status
+ * 3. AP Mode: Setup screen when device in Access Point mode
+ *
+ * Boot Sequence (Simplified):
+ * - "Booting..." splash (500ms)
+ * - Silent boot (no intermediate messages)
+ * - Status screen when network connected
+ *
+ * AP Mode Trigger:
+ * - Boot button held 15s (anytime) → "Entering AP Mode..." → reboot
  *
  * Uses non-blocking update pattern consistent with other modules.
  * Display refreshes every DISPLAY_REFRESH_INTERVAL (2000ms by default).
@@ -155,6 +165,18 @@ public:
      * @param seconds Seconds remaining for boot button press
      */
     void showBootCountdown(uint8_t seconds);
+
+    /**
+     * Show "Entering AP Mode..." message
+     * Displayed when boot button held for 15 seconds
+     */
+    void showEnteringAPMode();
+
+    /**
+     * Show "Exiting AP Mode..." message
+     * Displayed when boot button held for 15 seconds while in AP mode
+     */
+    void showExitingAPMode();
 
 private:
     Adafruit_SSD1306* display;

@@ -39,10 +39,6 @@ char deviceMAC[18];  // Format: "XX:XX:XX:XX:XX:XX"
 unsigned long lastHeartbeat = 0;
 unsigned long lastAnnouncement = 0;
 
-// Boot button check state
-bool bootButtonCheckActive = true;
-unsigned long bootButtonCheckStart = 0;
-
 // Display update coordination
 bool bootSequenceActive = true;  // Disable normal display updates during boot
 
@@ -116,17 +112,13 @@ void setup() {
     bootButton.begin();
     bootButton.setLongPressCallback(onBootButtonLongPress);
 
-    // Check for long press during boot (15s hold to enter AP mode)
-    Serial.println("Checking for AP mode trigger (hold BOOT for 15s)...");
-    Serial.println("Starting boot check - will monitor in main loop");
-    bootButtonCheckStart = millis();
-    bootButtonCheckActive = true;
+    // Boot button monitoring (15s hold to enter AP mode)
+    Serial.println("Boot button monitoring active (hold BOOT for 15s to enter AP mode)");
     bootSequenceActive = true;  // Boot mode - disable normal display updates
 
     // ===================================================================
     // STEP 7: Load Device Configuration from NVS
     // ===================================================================
-    displayManager.showBootStep("Loading config...");
     Serial.println("Loading device configuration from NVS...");
     deviceConfig.begin();
     deviceConfig.printSettings();
@@ -144,7 +136,6 @@ void setup() {
     // ===================================================================
     // STEP 8: Initialize Digital Outputs
     // ===================================================================
-    displayManager.showBootStep("Init outputs...");
     Serial.println("Initializing digital outputs...");
     if (outputs.begin()) {
         Serial.println("✓ Digital outputs ready (all OFF)\n");
@@ -156,7 +147,6 @@ void setup() {
     // STEP 9: Initialize Digital Inputs
     // Note: Will wait additional 50ms before reading to avoid glitches
     // ===================================================================
-    displayManager.showBootStep("Init inputs...");
     Serial.println("Initializing digital inputs...");
     inputs.begin();
     inputs.setCallback(onInputChange);
@@ -165,7 +155,6 @@ void setup() {
     // ===================================================================
     // STEP 10: Initialize Device Identification (LED + Buzzer)
     // ===================================================================
-    displayManager.showBootStep("Init peripherals...");
     Serial.println("Initializing device identification...");
     deviceID.begin();
     Serial.println("✓ Device identification ready\n");
@@ -220,7 +209,6 @@ void setup() {
     // STEP 11: Initialize Network (WiFi OR Ethernet)
     // Unified network manager handles interface selection
     // ===================================================================
-    displayManager.showBootStep("Connecting...");
     Serial.println("Initializing network...");
     if (networkManager.begin(deviceMAC)) {
         networkManager.setConnectionCallback(onNetworkConnection);
@@ -235,7 +223,6 @@ void setup() {
     // ===================================================================
     // STEP 12: Initialize MQTT with Device Discovery
     // ===================================================================
-    displayManager.showBootStep("Init MQTT...");
     Serial.println("Initializing MQTT client...");
     mqtt.begin(deviceMAC);  // Use MAC address as device ID
     mqtt.setFlashCallback(onFlashIdentify);
@@ -252,7 +239,6 @@ void setup() {
     // ===================================================================
     // STEP 13: Initialize OTA Manager
     // ===================================================================
-    displayManager.showBootStep("Init OTA...");
     Serial.println("Initializing OTA manager...");
     if (otaManager.begin()) {
         Serial.println("✓ OTA manager ready");
@@ -273,7 +259,6 @@ void setup() {
     // ===================================================================
     // STEP 14: Initialize Device Web Server
     // ===================================================================
-    displayManager.showBootStep("Starting web...");
     Serial.println("Initializing device web server...");
     if (deviceWebServer.begin(80)) {
         deviceWebServer.setConnectionManager(&networkManager);
@@ -294,9 +279,6 @@ void setup() {
     Serial.printf("CPU Frequency: %d MHz\n", ESP.getCpuFreqMHz());
     Serial.printf("Flash Size: %d bytes\n", ESP.getFlashChipSize());
     Serial.printf("Free Heap: %d bytes\n\n", ESP.getFreeHeap());
-
-    // Show normal status display
-    displayManager.forceRefresh();
 }
 
 void loop() {
@@ -307,40 +289,37 @@ void loop() {
     // Update network manager (WiFi or Ethernet) - always runs
     networkManager.update();
 
-    // Show connection progress on display (non-blocking)
+    // Boot completion: network connection check
     static bool initialConnectionComplete = false;
-    if (!initialConnectionComplete && !networkManager.isConnected()) {
-        static unsigned long lastDisplayUpdate = 0;
-        if (millis() - lastDisplayUpdate > 1000) {
-            displayManager.showBootStep("Connecting...");
-            lastDisplayUpdate = millis();
-        }
-    } else if (!initialConnectionComplete && networkManager.isConnected()) {
-        initialConnectionComplete = true;
-        Serial.println("✓ Network connected!");
-        Serial.printf("   Interface: %s\n",
-                     networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI ? "WiFi" : "Ethernet");
-        Serial.printf("   IP Address: %s\n", networkManager.getIP().toString().c_str());
+    if (!initialConnectionComplete && networkManager.isConnected()) {
+        // Log connection details
+        Serial.println("\n========================================");
+        Serial.println("  NETWORK CONNECTED");
+        Serial.printf("  Interface: %s\n",
+            networkManager.getActiveInterface() == ConnectionManager::INTERFACE_ETHERNET ? "Ethernet" : "WiFi");
+        Serial.printf("  IP Address: %s\n", networkManager.getIP().toString().c_str());
 
         if (networkManager.getActiveInterface() == ConnectionManager::INTERFACE_WIFI) {
-            Serial.printf("   RSSI: %d dBm\n", networkManager.getRSSI());
+            Serial.printf("  RSSI: %d dBm\n", networkManager.getRSSI());
 
             // Check if in AP mode
             WiFiManager* wifi = networkManager.getWiFiManager();
             if (wifi && wifi->getMode() == WiFiManager::MODE_AP) {
-                Serial.println("   MODE: Access Point (setup mode)");
-                Serial.println("   Connect to device's WiFi network to configure");
+                Serial.println("  MODE: Access Point (setup mode)");
+                Serial.println("  Connect to device's WiFi network to configure");
 
                 // Start AP mode LED indicator
                 deviceID.setLEDPattern(DeviceIdentification::LED_PATTERN_AP_MODE);
             }
         }
-        Serial.println();
+        Serial.println("========================================\n");
 
-        // Check if boot sequence is complete (both connection and countdown done)
-        if (!bootButtonCheckActive) {
+        initialConnectionComplete = true;
+
+        // End boot sequence and show status screen
+        if (bootSequenceActive) {
             bootSequenceActive = false;
-            Serial.println("Boot sequence complete - normal display updates enabled");
+            Serial.println("Boot sequence complete - showing status screen\n");
             displayManager.forceRefresh();
         }
     }
@@ -388,65 +367,45 @@ void loop() {
     // Update boot button handler
     bootButton.update();
 
-    // Handle boot button check (first 15 seconds)
-    if (bootButtonCheckActive) {
-        unsigned long elapsed = millis() - bootButtonCheckStart;
+    // Check for AP mode toggle (button held 15 seconds)
+    if (bootButton.longPressDetected()) {
+        Serial.println("\n!!! BOOT BUTTON HELD 15 SECONDS !!!");
 
-        if (elapsed < 15100) {
-            // Still in check period
-            static unsigned long lastCountdownUpdate = 0;
-            if (millis() - lastCountdownUpdate > 1000) {
-                uint8_t secondsLeft = (15100 - elapsed) / 1000;
-                if (!bootButton.isPressed()) {
-                    displayManager.showBootCountdown(secondsLeft);
-                }
-                lastCountdownUpdate = millis();
-            }
+        // Check if currently in AP mode
+        bool inAPMode = networkManager.isInAPMode();
 
-            // Check for long press
-            if (bootButton.isPressed()) {
-                displayManager.showBootStep("Hold for AP Mode...");
+        if (inAPMode) {
+            // Exit AP mode - restore default Ethernet mode
+            Serial.println("Exiting AP mode and returning to normal operation");
 
-                if (bootButton.longPressDetected()) {
-                    Serial.println("\n!!! BOOT BUTTON HELD 15 SECONDS !!!");
-                    Serial.println("Clearing WiFi credentials and entering AP mode");
+            displayManager.showExitingAPMode();
+            delay(1500);  // Show message for 1.5 seconds
 
-                    displayManager.showMessage("AP Mode!");
-                    delay(1000);  // Brief delay for user feedback
+            // Clear AP mode flag and default to Ethernet (preferred connection)
+            deviceConfig.clearWiFiAPMode();
+            deviceConfig.setConnectionMode(MODE_ETHERNET);  // Default to Ethernet
+            deviceConfig.enableWiFi(false);  // Disable WiFi (use Ethernet by default)
 
-                    deviceConfig.clearWiFiCredentials();
-                    deviceConfig.save();
-
-                    Serial.println("Configuration cleared. Device will enter AP mode on boot.\n");
-                    Serial.println("Rebooting in 2 seconds...");
-                    delay(2000);
-                    ESP.restart();
-                }
-            }
+            Serial.println("AP mode disabled. Device will boot in Ethernet mode.\n");
+            Serial.println("WiFi disabled - configure WiFi credentials to enable WiFi mode");
+            Serial.println("Rebooting in 2 seconds...");
+            delay(2000);
+            ESP.restart();
         } else {
-            // Check period complete
-            bootButtonCheckActive = false;
-            Serial.println("Boot button check complete - device fully operational");
-            displayManager.forceRefresh();  // Show normal status
+            // Enter AP mode - clear WiFi credentials
+            Serial.println("Clearing WiFi credentials and entering AP mode");
+
+            displayManager.showEnteringAPMode();
+            delay(1500);  // Show message for 1.5 seconds
+
+            deviceConfig.clearWiFiCredentials();
+            deviceConfig.save();
+
+            Serial.println("Configuration cleared. Device will enter AP mode on boot.\n");
+            Serial.println("Rebooting in 2 seconds...");
+            delay(2000);
+            ESP.restart();
         }
-
-        // Check if boot sequence is complete (both countdown and connection done)
-        if (bootButtonCheckActive == false && initialConnectionComplete) {
-            bootSequenceActive = false;
-            Serial.println("Boot sequence complete - normal display updates enabled");
-            displayManager.forceRefresh();
-        }
-    }
-
-    // Handle long press during runtime (force AP mode)
-    if (!bootButtonCheckActive && bootButton.longPressDetected()) {
-        Serial.println("\n!!! BOOT BUTTON HELD - ENTERING AP MODE !!!");
-        deviceConfig.clearWiFiCredentials();
-        deviceConfig.save();
-
-        Serial.println("Rebooting to AP mode in 3 seconds...");
-        delay(3000);
-        ESP.restart();
     }
 
     // Update MQTT client (handles reconnection)

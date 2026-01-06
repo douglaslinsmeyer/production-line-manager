@@ -122,6 +122,42 @@ void DisplayManager::showMessage(const char* message) {
     display->display();
 }
 
+void DisplayManager::showEnteringAPMode() {
+    if (!displayInitialized || display == nullptr) return;
+
+    display->clearDisplay();
+    display->setTextSize(2);  // Large text
+    display->setTextColor(SSD1306_WHITE);
+
+    // Center "Entering" on line 1
+    display->setCursor(10, 8);
+    display->println("Entering");
+
+    // Center "AP Mode..." on line 2
+    display->setCursor(4, 32);
+    display->println("AP Mode...");
+
+    display->display();
+}
+
+void DisplayManager::showExitingAPMode() {
+    if (!displayInitialized || display == nullptr) return;
+
+    display->clearDisplay();
+    display->setTextSize(2);  // Large text
+    display->setTextColor(SSD1306_WHITE);
+
+    // Center "Exiting" on line 1
+    display->setCursor(16, 8);
+    display->println("Exiting");
+
+    // Center "AP Mode..." on line 2
+    display->setCursor(4, 32);
+    display->println("AP Mode...");
+
+    display->display();
+}
+
 void DisplayManager::refreshDisplay() {
     if (networkManager == nullptr || mqttManager == nullptr) {
         // Managers not set yet
@@ -138,13 +174,15 @@ void DisplayManager::refreshDisplay() {
 
     if (inAPMode) {
         drawAPMode();
-    } else if (networkConnected) {
-        drawIPAddress(networkManager->getIP().toString().c_str());
-        drawNetworkStatus();
-        drawMQTTStatus();
-        drawUptime();
     } else {
-        drawNoNetwork();
+        // Always show standard status screen (connected or not)
+        if (networkConnected) {
+            drawIPAddress(networkManager->getIP().toString().c_str());
+        } else {
+            drawIPAddress("Not Connected");
+        }
+        drawNetworkStatus();  // Shows "Connecting..." or "Disconnected" when offline
+        drawMQTTStatus();     // Shows "Disconnected" when offline
     }
 
     display->display();  // Push to hardware
@@ -198,6 +236,9 @@ void DisplayManager::drawMQTTStatus() {
     }
 }
 
+// PRESERVED: Uptime display function (currently unused in normal status)
+// Removed from normal status display to simplify layout
+// Still used in drawNoNetwork() if that function is ever re-enabled
 void DisplayManager::drawUptime() {
     display->setTextSize(1);  // 8px tall
     display->setTextColor(SSD1306_WHITE);
@@ -225,6 +266,8 @@ void DisplayManager::drawAPMode() {
     display->println("Visit to configure");
 }
 
+// UNUSED - Separate "No Network" screen removed in favor of unified status display
+// Status screen now shows "Not Connected" and appropriate offline indicators
 void DisplayManager::drawNoNetwork() {
     display->setTextSize(2);
     display->setTextColor(SSD1306_WHITE);
@@ -430,6 +473,8 @@ void DisplayManager::showBootStep(const char* step) {
     display->display();
 }
 
+// UNUSED - Boot countdown removed in favor of silent boot
+// Preserved for reference if countdown display needed in future
 void DisplayManager::showBootCountdown(uint8_t seconds) {
     if (!displayInitialized || display == nullptr) return;
 

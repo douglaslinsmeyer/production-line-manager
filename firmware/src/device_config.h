@@ -54,6 +54,7 @@ public:
     bool setConnectionMode(ConnectionMode mode);
     bool setWiFiCredentials(const char* ssid, const char* password);
     bool clearWiFiCredentials();
+    bool clearWiFiAPMode();
     bool enableWiFi(bool enable);
     bool isWiFiEnabled() const;
     bool isWiFiAPMode() const;
