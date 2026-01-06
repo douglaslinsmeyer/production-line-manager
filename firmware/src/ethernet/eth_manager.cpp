@@ -17,25 +17,21 @@ bool EthernetManager::begin() {
     // GPIO12-16 are used for W5500 SPI - must wait for glitches to complete
     delay(BOOT_STABILIZATION_DELAY);
 
-    // Proper W5500 reset sequence
-    pinMode(ETH_PHY_RST, OUTPUT);
-    digitalWrite(ETH_PHY_RST, LOW);
-    delay(20);  // Hold reset for 20ms (minimum per W5500 datasheet)
-    digitalWrite(ETH_PHY_RST, HIGH);
-    delay(100);  // Wait for W5500 to initialize
-
-    // Register network event handler
-    Network.onEvent(onEvent);
-
-    // Initialize SPI bus for W5500
+    // Initialize SPI bus for W5500 FIRST (before event registration)
     SPI.begin(ETH_SPI_SCK, ETH_SPI_MISO, ETH_SPI_MOSI);
 
+    // Register network event handler AFTER SPI is ready
+    Network.onEvent(onEvent);
+
     // Initialize W5500 Ethernet (using ESP32 ETH library with W5500 support)
+    // Let ETH.begin() handle the reset internally - do NOT manually reset beforehand
     Serial.printf("  W5500 CS: GPIO%d\n", ETH_PHY_CS);
     Serial.printf("  W5500 RST: GPIO%d\n", ETH_PHY_RST);
     Serial.printf("  SPI SCK: GPIO%d, MISO: GPIO%d, MOSI: GPIO%d\n",
                  ETH_SPI_SCK, ETH_SPI_MISO, ETH_SPI_MOSI);
 
+    // IMPORTANT: ETH.begin() will handle the RST pin reset internally
+    // Do not manually reset the W5500 beforehand as it causes DHCP issues
     bool success = ETH.begin(ETH_PHY_TYPE, ETH_PHY_ADDR, ETH_PHY_CS,
                              ETH_PHY_IRQ, ETH_PHY_RST, SPI);
 
@@ -44,7 +40,7 @@ bool EthernetManager::begin() {
         return false;
     }
 
-    // Set hostname
+    // Set hostname for DHCP
     ETH.setHostname("esp32-s3-poe-eth");
 
     // Configure static IP if not using DHCP
@@ -56,6 +52,8 @@ bool EthernetManager::begin() {
         dns.fromString(DNS_SERVER);
         ETH.config(local_ip, gateway, subnet, dns);
         Serial.println("Static IP configured");
+    } else {
+        Serial.println("DHCP enabled - waiting for IP address...");
     }
 
     Serial.println("W5500 initialized - waiting for connection...");

@@ -17,8 +17,8 @@ MQTTClientManager::MQTTClientManager()
       flashCallback(nullptr),
       networkManagerPtr(nullptr),
       lastReconnectAttempt(0),
-      reconnectInterval(5000),
-      mdnsDiscovery(nullptr) {
+      reconnectInterval(BASE_RECONNECT_INTERVAL),
+      reconnectAttempts(0) {
 
     instance = this;
     deviceMAC[0] = '\0';
@@ -37,89 +37,33 @@ void MQTTClientManager::begin(const char* macAddress) {
 
     // Get broker configuration from device settings
     const DeviceConfig::Settings& settings = deviceConfig.getSettings();
-    const char* broker = nullptr;
-    uint16_t port = MQTT_PORT;
 
-    // === mDNS DISCOVERY ===
-    if (settings.mdnsEnabled) {
-        Serial.println("mDNS discovery enabled");
-
-        // Lazy initialization of mDNS discovery
-        if (!mdnsDiscovery) {
-            mdnsDiscovery = new MDNSDiscovery();
-            mdnsDiscovery->begin(deviceMAC);
-        }
-
-        // Try cache first (fast path)
-        IPAddress cachedIP;
-        uint16_t cachedPort;
-        if (settings.mdnsCacheEnabled &&
-            mdnsDiscovery->getCachedBroker(cachedIP, cachedPort)) {
-            // Use cached broker
-            static String cachedIPStr;
-            cachedIPStr = cachedIP.toString();
-            broker = cachedIPStr.c_str();
-            port = cachedPort;
-            Serial.printf("Using cached broker: %s:%d\n", broker, port);
-        } else {
-            // Perform live discovery
-            Serial.println("Performing mDNS discovery...");
-            MDNSDiscovery::DiscoveryConfig config;
-            config.enabled = true;
-            config.timeoutMs = settings.mdnsTimeoutMs;
-            config.cacheResults = settings.mdnsCacheEnabled;
-            config.cacheExpiryMs = settings.mdnsCacheExpiryMs;
-            strncpy(config.serviceName, settings.mdnsServiceName, sizeof(config.serviceName) - 1);
-            config.serviceName[sizeof(config.serviceName) - 1] = '\0';
-            strncpy(config.protocol, settings.mdnsProtocol, sizeof(config.protocol) - 1);
-            config.protocol[sizeof(config.protocol) - 1] = '\0';
-
-            auto discovered = mdnsDiscovery->discoverBroker(config);
-
-            if (discovered.valid) {
-                // Use discovered broker
-                static String discoveredIPStr;
-                discoveredIPStr = discovered.ip.toString();
-                broker = discoveredIPStr.c_str();
-                port = discovered.port;
-                Serial.printf("✓ Discovered broker: %s (%s:%d)\n",
-                             discovered.hostname, broker, port);
-
-                // Cache for future use
-                if (settings.mdnsCacheEnabled) {
-                    mdnsDiscovery->cacheBroker(discovered.ip, discovered.port);
-                }
-            } else {
-                Serial.println("✗ mDNS discovery failed - falling back to configured broker");
-            }
-        }
-    }
-
-    // === FALLBACK CHAIN ===
-    // If mDNS didn't find anything, use configured or default broker
-    if (broker == nullptr) {
-        broker = (strlen(settings.mqttBroker) > 0) ? settings.mqttBroker : MQTT_BROKER;
-        port = (settings.mqttPort > 0) ? settings.mqttPort : MQTT_PORT;
-        Serial.printf("Using configured broker: %s:%d\n", broker, port);
-    }
+    // Use configured broker or default
+    const char* broker = (strlen(settings.mqttBroker) > 0) ? settings.mqttBroker : MQTT_BROKER;
+    uint16_t port = (settings.mqttPort > 0) ? settings.mqttPort : MQTT_PORT;
+    Serial.printf("Using configured broker: %s:%d\n", broker, port);
 
     mqttClient.setServer(broker, port);
     mqttClient.setCallback(onMessage);
     mqttClient.setBufferSize(MQTT_MAX_PACKET_SIZE);
 
     Serial.printf("\nMQTT configured:\n");
+    Serial.printf("  Status: %s\n", settings.mqttEnabled ? "Enabled" : "Disabled");
     Serial.printf("  Broker: %s:%d\n", broker, port);
-    Serial.printf("  mDNS: %s\n", settings.mdnsEnabled ? "Enabled" : "Disabled");
     Serial.printf("  Device ID (MAC): %s\n", deviceMAC);
     Serial.printf("  Command topic: %s\n", deviceTopicCommand);
     Serial.printf("  Status topic: %s\n", deviceTopicStatus);
 }
 
 bool MQTTClientManager::connect() {
-    Serial.println("Connecting to MQTT broker...");
-
-    // Get MQTT credentials from device configuration
+    // Check if MQTT is enabled
     const DeviceConfig::Settings& settings = deviceConfig.getSettings();
+    if (!settings.mqttEnabled) {
+        Serial.println("MQTT is disabled - skipping connection");
+        return false;
+    }
+
+    Serial.println("Connecting to MQTT broker...");
 
     // Use MAC as client ID for uniqueness
     // Use stored credentials if available, otherwise fall back to compiled defaults
@@ -134,6 +78,10 @@ bool MQTTClientManager::connect() {
 
     if (success) {
         Serial.println("MQTT connected!");
+
+        // Reset retry counter on successful connection
+        reconnectAttempts = 0;
+        reconnectInterval = BASE_RECONNECT_INTERVAL;
 
         // Subscribe to device-specific command topic
         if (mqttClient.subscribe(deviceTopicCommand)) {
@@ -163,7 +111,20 @@ void MQTTClientManager::setNetworkManager(ConnectionManager* manager) {
     networkManagerPtr = manager;
 }
 
+void MQTTClientManager::resetReconnectAttempts() {
+    reconnectAttempts = 0;
+    reconnectInterval = BASE_RECONNECT_INTERVAL;
+    lastReconnectAttempt = 0;
+    Serial.println("MQTT: Reconnection attempts reset");
+}
+
 void MQTTClientManager::update() {
+    // Skip MQTT operations if MQTT is disabled
+    const DeviceConfig::Settings& settings = deviceConfig.getSettings();
+    if (!settings.mqttEnabled) {
+        return;  // MQTT is disabled in configuration
+    }
+
     // Skip MQTT operations if in AP mode (no internet connectivity)
     if (networkManagerPtr && networkManagerPtr->isInAPMode()) {
         return;  // Don't attempt MQTT in AP mode
@@ -175,11 +136,35 @@ void MQTTClientManager::update() {
     }
 
     if (!mqttClient.connected()) {
-        // Auto-reconnect logic
+        // Check if we've exceeded max retry attempts
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            // Log once when we hit the limit
+            static bool maxRetriesLogged = false;
+            if (!maxRetriesLogged) {
+                Serial.printf("MQTT: Max reconnection attempts (%d) reached. Waiting for network change or manual reset.\n",
+                             MAX_RECONNECT_ATTEMPTS);
+                maxRetriesLogged = true;
+            }
+            return;  // Stop trying to reconnect
+        }
+
+        // Auto-reconnect logic with exponential backoff
         if (millis() - lastReconnectAttempt > reconnectInterval) {
             lastReconnectAttempt = millis();
-            Serial.println("MQTT reconnecting...");
-            connect();
+            reconnectAttempts++;
+
+            Serial.printf("MQTT reconnecting... (attempt %d/%d)\n",
+                         reconnectAttempts, MAX_RECONNECT_ATTEMPTS);
+
+            if (connect()) {
+                // Connection successful - counters already reset in connect()
+                Serial.println("MQTT reconnection successful!");
+            } else {
+                // Connection failed - apply exponential backoff
+                reconnectInterval = min(reconnectInterval * 2, MAX_RECONNECT_INTERVAL);
+                Serial.printf("MQTT reconnection failed. Next attempt in %lu seconds.\n",
+                             reconnectInterval / 1000);
+            }
         }
     } else {
         mqttClient.loop();
@@ -187,6 +172,10 @@ void MQTTClientManager::update() {
 }
 
 bool MQTTClientManager::isConnected() {
+    const DeviceConfig::Settings& settings = deviceConfig.getSettings();
+    if (!settings.mqttEnabled) {
+        return false;  // MQTT is disabled
+    }
     return mqttClient.connected();
 }
 

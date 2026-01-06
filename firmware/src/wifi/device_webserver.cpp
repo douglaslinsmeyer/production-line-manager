@@ -170,7 +170,9 @@ void DeviceWebServer::handleSaveMQTT() {
         uint16_t port = webServer->arg("port").toInt();
         String user = webServer->hasArg("user") ? webServer->arg("user") : "";
         String password = webServer->hasArg("password") ? webServer->arg("password") : "";
+        bool enabled = webServer->hasArg("enabled") && webServer->arg("enabled") == "on";
 
+        deviceConfig.enableMQTT(enabled);
         deviceConfig.setMQTTBroker(broker.c_str(), port);
         if (user.length() > 0) {
             deviceConfig.setMQTTAuth(user.c_str(), password.c_str());
@@ -737,6 +739,13 @@ String DeviceWebServer::generateMQTTPage() {
     html += "<div class='card'>";
     html += "<h2>MQTT Broker Configuration</h2>";
     html += "<form id='mqttForm' onsubmit='saveMQTT(event)'>";
+
+    html += "<div class='form-group'>";
+    html += "<label>";
+    html += "<input type='checkbox' name='enabled' " + String(settings.mqttEnabled ? "checked" : "") + "> Enable MQTT";
+    html += "</label>";
+    html += "<small style='display:block;margin-top:5px;color:#666;'>Turn MQTT functionality on or off</small>";
+    html += "</div>";
 
     html += "<div class='form-group'>";
     html += "<label>Broker Address:</label>";

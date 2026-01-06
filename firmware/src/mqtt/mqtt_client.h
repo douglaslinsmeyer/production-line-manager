@@ -5,7 +5,6 @@
 #include <WiFiClient.h>
 #include <ArduinoJson.h>
 #include "state/line_state.h"
-#include "network/mdns_discovery.h"
 
 // Forward declaration
 class ConnectionManager;
@@ -48,6 +47,9 @@ public:
     // Set network manager reference (for connectivity checks)
     void setNetworkManager(ConnectionManager* manager);
 
+    // Reset reconnection attempts (call when network conditions change)
+    void resetReconnectAttempts();
+
 private:
     WiFiClient ethClient;
     PubSubClient mqttClient;
@@ -55,7 +57,10 @@ private:
     ConnectionManager* networkManagerPtr;
     unsigned long lastReconnectAttempt;
     unsigned long reconnectInterval;
-    MDNSDiscovery* mdnsDiscovery;  // mDNS discovery handler
+    uint8_t reconnectAttempts;
+    static const uint8_t MAX_RECONNECT_ATTEMPTS = 10;
+    static const unsigned long BASE_RECONNECT_INTERVAL = 5000;  // 5 seconds
+    static const unsigned long MAX_RECONNECT_INTERVAL = 60000;  // 60 seconds
 
     char deviceMAC[18];  // MAC address in format "XX:XX:XX:XX:XX:XX"
     char deviceTopicCommand[64];  // devices/{MAC}/command

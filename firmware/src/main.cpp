@@ -580,7 +580,8 @@ void onNetworkConnection(bool connected) {
             deviceID.setLEDPattern(DeviceIdentification::LED_PATTERN_OFF);
         }
 
-        // Connect to MQTT when network comes up
+        // Reset MQTT reconnection attempts and connect to MQTT when network comes up
+        mqtt.resetReconnectAttempts();
         mqtt.connect();
 
         // Force display refresh on network connection
