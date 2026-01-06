@@ -52,6 +52,11 @@
 // Control Button Configuration
 #define CONTROL_BUTTON_CHANNEL 0           // DIN1 (first digital input, 0-indexed)
 #define CONTROL_BUTTON_GPIO 4              // GPIO4 (DIN1)
+
+// Device Identification Pins
+#define GPIO_RGB_LED 38                    // GPIO38 - RGB LED
+#define GPIO_BUZZER 46                     // GPIO46 - Buzzer
+#define BUZZER_PIN GPIO_BUZZER             // Alias for signal profiles
 #define CONTROL_BUTTON_LONG_PRESS 5000     // 5 seconds for long press (maintenance mode)
 #define BUTTON_LED_CHANNEL 4               // EXIO5 (TCA9554PWR channel 4, 0-indexed)
 

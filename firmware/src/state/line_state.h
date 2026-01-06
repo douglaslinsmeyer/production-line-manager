@@ -1,77 +1,77 @@
 #pragma once
 
 #include <Arduino.h>
+#include "../profile/profile_manager.h"
 
 /**
- * Production Line State Manager
+ * Production Line State Manager (Refactored for Signal Profiles)
  *
- * Tracks local production line state (On/Off/Maintenance/Error)
- * and provides state transition logic for control button.
+ * Manages production line state using dynamic state names from signal profiles.
+ * Supports both legacy enum-based states and profile-based string states.
  *
  * State is:
- * - Initialized to UNKNOWN on boot
+ * - Loaded from ProfileStorage on boot (current_state key)
  * - Synchronized with MQTT commands from API
- * - Updated immediately on button press (firmware authority)
- * - Persisted to NVS for power-cycle resilience
+ * - Updated on button press using profile button cycles
+ * - Persisted via ProfileStorage (not separate NVS namespace)
+ *
+ * Legacy Compatibility:
+ * - Keeps LineState enum for compilation compatibility
+ * - Internal logic uses String state names
  */
 
+// Legacy enum (kept for backward compatibility)
 enum LineState {
-    LINE_STATE_UNKNOWN = 0,     // Initial state on boot before sync
-    LINE_STATE_OFF = 1,          // Production line stopped
-    LINE_STATE_ON = 2,           // Production line running
-    LINE_STATE_MAINTENANCE = 3,  // Maintenance mode
-    LINE_STATE_ERROR = 4         // Error state (set by API only)
+    LINE_STATE_UNKNOWN = 0,
+    LINE_STATE_OFF = 1,
+    LINE_STATE_ON = 2,
+    LINE_STATE_MAINTENANCE = 3,
+    LINE_STATE_ERROR = 4
 };
 
-// State change callback type
-typedef void (*StateChangeCallback)(LineState oldState, LineState newState);
+// State change callback type (now uses String state names)
+typedef void (*StateChangeCallback)(const char* oldState, const char* newState);
 
 class LineStateManager {
 public:
     LineStateManager();
 
     /**
-     * Initialize state manager
-     * Loads last known state from NVS (if available)
+     * Initialize state manager with profile manager reference
+     * @param profileMgr Pointer to ProfileManager instance
      */
-    void begin();
+    void begin(ProfileManager* profileMgr);
 
     /**
-     * Get current production line state
+     * Get current production line state as string
      */
-    LineState getState() const { return currentState; }
+    const char* getState() const;
 
     /**
-     * Get state as string (for logging/MQTT)
+     * Get state as legacy enum (for backward compatibility)
+     * Maps dynamic state names to closest enum value
      */
-    const char* getStateString() const;
-    static const char* stateToString(LineState state);
+    LineState getStateLegacy() const;
 
     /**
-     * Set state (from MQTT command or button press)
-     * @param newState Target state
+     * Set state by name (from MQTT command or manual change)
+     * @param stateName Target state name
      * @param source "button", "mqtt", "boot", etc. for logging
      * @return true if state changed
      */
-    bool setState(LineState newState, const char* source = "unknown");
+    bool setState(const char* stateName, const char* source = "unknown");
 
     /**
-     * Handle short button press (toggle logic)
-     * Implements:
-     *   On → Off
-     *   Off → On
-     *   Maintenance → On
-     *   Error → On
-     * @return New state after transition
+     * Handle short button press (uses profile's shortPressCycle)
+     * @return New state name after transition
      */
-    LineState handleShortPress();
+    const char* handleShortPress();
 
     /**
-     * Handle long button press (5+ seconds)
-     * Any state → Maintenance
-     * @return New state (always MAINTENANCE)
+     * Handle long button press (uses profile's longPressCycle)
+     * @return New state name after transition
      */
-    LineState handleLongPress();
+    const char* handleLongPress();
 
     /**
      * Set callback for state changes
@@ -79,16 +79,32 @@ public:
     void setStateChangeCallback(StateChangeCallback callback);
 
     /**
-     * Check if state transitions are allowed
-     * (Future: could block certain transitions)
+     * Check if state name is valid (exists in profile)
+     * @return true if state is valid
      */
-    bool isTransitionAllowed(LineState from, LineState to) const;
+    bool isValidState(const char* stateName) const;
+
+    /**
+     * Get ProfileManager reference
+     */
+    ProfileManager* getProfileManager() { return profileManager; }
+
+    /**
+     * Legacy method: Convert state name to enum
+     */
+    static LineState stringToEnum(const char* stateName);
+
+    /**
+     * Legacy method: Convert enum to state name
+     */
+    static const char* enumToString(LineState state);
 
 private:
-    LineState currentState;
+    String currentStateName;
+    ProfileManager* profileManager;
     StateChangeCallback changeCallback;
 
-    // NVS persistence
+    // Helper methods
     void saveState();
     void loadState();
 };

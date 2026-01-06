@@ -41,12 +41,12 @@ public:
     void update();
 
     /**
-     * Set callback for short press (button released before 5s)
+     * Set callback for short press (button released before 1s)
      */
     void setShortPressCallback(ControlButtonShortPressCallback callback);
 
     /**
-     * Set callback for long press (button held >= 5s)
+     * Set callback for long press (button held >= 1s)
      */
     void setLongPressCallback(ControlButtonLongPressCallback callback);
 
@@ -68,5 +68,5 @@ private:
     ControlButtonShortPressCallback shortPressCallback;
     ControlButtonLongPressCallback longPressCallback;
 
-    static const uint32_t LONG_PRESS_DURATION = 5000;  // 5 seconds
+    static const uint32_t LONG_PRESS_DURATION = 1000;  // 1 second (per signal profiles spec)
 };

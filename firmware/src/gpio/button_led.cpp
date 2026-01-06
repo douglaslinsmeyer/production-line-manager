@@ -56,8 +56,8 @@ void ButtonLED::setStatePattern(LineState state) {
     }
 
     Serial.printf("Button LED pattern changed: %s -> %s\n",
-                 LineStateManager::stateToString(currentState),
-                 LineStateManager::stateToString(state));
+                 LineStateManager::enumToString(currentState),
+                 LineStateManager::enumToString(state));
 
     currentState = state;
     lastToggle = millis();

@@ -49,7 +49,7 @@ void ControlButton::update() {
 
         if (currentDuration >= LONG_PRESS_DURATION) {
             longPressTriggered = true;
-            Serial.println("Long press detected (5 seconds) - Maintenance mode");
+            Serial.println("Long press detected (1 second)");
 
             if (longPressCallback != nullptr) {
                 longPressCallback();

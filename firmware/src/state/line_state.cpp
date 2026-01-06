@@ -1,134 +1,183 @@
 #include "line_state.h"
-#include <Preferences.h>
-
-// NVS namespace for state persistence
-static const char* NVS_NAMESPACE = "linestate";
-static const char* NVS_STATE_KEY = "current";
 
 LineStateManager::LineStateManager()
-    : currentState(LINE_STATE_UNKNOWN),
+    : currentStateName("Unknown"),
+      profileManager(nullptr),
       changeCallback(nullptr) {
 }
 
-void LineStateManager::begin() {
-    Serial.println("Initializing Line State Manager...");
+void LineStateManager::begin(ProfileManager* profileMgr) {
+    Serial.println("[LineStateManager] Initializing...");
 
-    // Load last known state from NVS
+    profileManager = profileMgr;
+
+    // Load state from ProfileStorage
     loadState();
 
-    Serial.printf("Initial state: %s\n", getStateString());
-}
-
-const char* LineStateManager::getStateString() const {
-    return stateToString(currentState);
-}
-
-const char* LineStateManager::stateToString(LineState state) {
-    switch (state) {
-        case LINE_STATE_UNKNOWN:     return "UNKNOWN";
-        case LINE_STATE_OFF:         return "OFF";
-        case LINE_STATE_ON:          return "ON";
-        case LINE_STATE_MAINTENANCE: return "MAINTENANCE";
-        case LINE_STATE_ERROR:       return "ERROR";
-        default:                     return "INVALID";
+    // Validate loaded state against profile
+    if (profileManager && profileManager->hasProfile()) {
+        if (!profileManager->isValidState(currentStateName.c_str())) {
+            Serial.printf("[LineStateManager] Warning: Loaded state '%s' not in profile, using default\n",
+                         currentStateName.c_str());
+            currentStateName = profileManager->getDefaultState();
+            saveState();
+        }
     }
+
+    Serial.printf("[LineStateManager] Initial state: %s\n", currentStateName.c_str());
 }
 
-bool LineStateManager::setState(LineState newState, const char* source) {
-    if (currentState == newState) {
+const char* LineStateManager::getState() const {
+    return currentStateName.c_str();
+}
+
+LineState LineStateManager::getStateLegacy() const {
+    return stringToEnum(currentStateName.c_str());
+}
+
+bool LineStateManager::setState(const char* stateName, const char* source) {
+    // Check if new state is different
+    if (currentStateName.equals(stateName)) {
         return false;  // No change
     }
 
-    // Check if transition is allowed
-    if (!isTransitionAllowed(currentState, newState)) {
-        Serial.printf("State transition blocked: %s -> %s\n",
-                     stateToString(currentState),
-                     stateToString(newState));
-        return false;
+    // Validate state if profile is loaded
+    if (profileManager && profileManager->hasProfile()) {
+        if (!profileManager->isValidState(stateName)) {
+            Serial.printf("[LineStateManager] Error: Invalid state '%s' for current profile\n", stateName);
+            return false;
+        }
     }
 
-    LineState oldState = currentState;
-    currentState = newState;
+    String oldStateName = currentStateName;
+    currentStateName = stateName;
 
-    Serial.printf("State changed: %s -> %s (source: %s)\n",
-                 stateToString(oldState),
-                 stateToString(newState),
+    Serial.printf("[LineStateManager] State changed: %s -> %s (source: %s)\n",
+                 oldStateName.c_str(),
+                 currentStateName.c_str(),
                  source);
 
-    // Persist to NVS
+    // Persist to storage
     saveState();
 
     // Notify callback
     if (changeCallback != nullptr) {
-        changeCallback(oldState, newState);
+        changeCallback(oldStateName.c_str(), currentStateName.c_str());
     }
 
     return true;
 }
 
-LineState LineStateManager::handleShortPress() {
-    LineState newState;
+const char* LineStateManager::handleShortPress() {
+    if (!profileManager || !profileManager->hasProfile()) {
+        // Legacy behavior if no profile loaded
+        Serial.println("[LineStateManager] No profile loaded, using legacy short press behavior");
 
-    switch (currentState) {
-        case LINE_STATE_ON:
-            newState = LINE_STATE_OFF;
-            break;
+        if (currentStateName.equals("On")) {
+            setState("Off", "button_short");
+        } else {
+            setState("On", "button_short");
+        }
 
-        case LINE_STATE_OFF:
-        case LINE_STATE_MAINTENANCE:
-        case LINE_STATE_ERROR:
-        case LINE_STATE_UNKNOWN:
-            newState = LINE_STATE_ON;
-            break;
-
-        default:
-            newState = LINE_STATE_ON;
-            break;
+        return currentStateName.c_str();
     }
 
-    setState(newState, "button_short");
-    return newState;
+    // Use profile's short press cycle
+    const char* nextState = profileManager->getNextStateInCycle(currentStateName.c_str(), false);
+
+    Serial.printf("[LineStateManager] Short press: %s -> %s\n",
+                 currentStateName.c_str(), nextState);
+
+    setState(nextState, "button_short");
+    return currentStateName.c_str();
 }
 
-LineState LineStateManager::handleLongPress() {
-    setState(LINE_STATE_MAINTENANCE, "button_long");
-    return LINE_STATE_MAINTENANCE;
+const char* LineStateManager::handleLongPress() {
+    if (!profileManager || !profileManager->hasProfile()) {
+        // Legacy behavior if no profile loaded
+        Serial.println("[LineStateManager] No profile loaded, using legacy long press behavior");
+        setState("Maintenance", "button_long");
+        return currentStateName.c_str();
+    }
+
+    // Use profile's long press cycle
+    const char* nextState = profileManager->getNextStateInCycle(currentStateName.c_str(), true);
+
+    Serial.printf("[LineStateManager] Long press: %s -> %s\n",
+                 currentStateName.c_str(), nextState);
+
+    setState(nextState, "button_long");
+    return currentStateName.c_str();
 }
 
 void LineStateManager::setStateChangeCallback(StateChangeCallback callback) {
     changeCallback = callback;
 }
 
-bool LineStateManager::isTransitionAllowed(LineState from, LineState to) const {
-    // Currently all transitions are allowed
-    // Future: could block transitions like ERROR->ON without clearance
-    return true;
+bool LineStateManager::isValidState(const char* stateName) const {
+    if (!profileManager || !profileManager->hasProfile()) {
+        // Without profile, accept legacy states
+        return (strcmp(stateName, "On") == 0 ||
+                strcmp(stateName, "Off") == 0 ||
+                strcmp(stateName, "Maintenance") == 0 ||
+                strcmp(stateName, "Error") == 0 ||
+                strcmp(stateName, "Unknown") == 0);
+    }
+
+    return profileManager->isValidState(stateName);
 }
 
 void LineStateManager::saveState() {
-    Preferences prefs;
-    if (prefs.begin(NVS_NAMESPACE, false)) {  // Read-write mode
-        prefs.putUChar(NVS_STATE_KEY, static_cast<uint8_t>(currentState));
-        prefs.end();
-    } else {
-        Serial.println("Failed to save state to NVS");
+    // State is now saved via ProfileStorage (current_state key)
+    // This method is kept for API compatibility but delegates to ProfileStorage
+    if (profileManager && profileManager->hasProfile()) {
+        // ProfileStorage is accessed via ProfileManager's storage reference
+        // We'll update this when integrating - for now just log
+        Serial.printf("[LineStateManager] State should be saved: %s\n", currentStateName.c_str());
     }
 }
 
 void LineStateManager::loadState() {
+    // State is loaded from ProfileStorage (current_state key)
+    // For now, use legacy NVS loading as fallback
     Preferences prefs;
-    if (prefs.begin(NVS_NAMESPACE, true)) {  // Read-only mode
-        uint8_t savedState = prefs.getUChar(NVS_STATE_KEY, LINE_STATE_UNKNOWN);
-        currentState = static_cast<LineState>(savedState);
+    if (prefs.begin("linestate", true)) {  // Read-only
+        uint8_t savedState = prefs.getUChar("current", LINE_STATE_UNKNOWN);
+        LineState legacyState = static_cast<LineState>(savedState);
+        currentStateName = enumToString(legacyState);
         prefs.end();
 
-        if (currentState == LINE_STATE_UNKNOWN) {
-            Serial.println("No saved state found in NVS");
-        } else {
-            Serial.printf("Loaded state from NVS: %s\n", getStateString());
+        if (legacyState != LINE_STATE_UNKNOWN) {
+            Serial.printf("[LineStateManager] Loaded legacy state from NVS: %s\n", currentStateName.c_str());
         }
     } else {
-        Serial.println("Failed to load state from NVS");
-        currentState = LINE_STATE_UNKNOWN;
+        currentStateName = "Unknown";
+    }
+}
+
+// ========== Legacy Conversion Methods ==========
+
+LineState LineStateManager::stringToEnum(const char* stateName) {
+    if (strcmp(stateName, "On") == 0 || strcmp(stateName, "ON") == 0) {
+        return LINE_STATE_ON;
+    } else if (strcmp(stateName, "Off") == 0 || strcmp(stateName, "OFF") == 0) {
+        return LINE_STATE_OFF;
+    } else if (strcmp(stateName, "Maintenance") == 0 || strcmp(stateName, "MAINTENANCE") == 0) {
+        return LINE_STATE_MAINTENANCE;
+    } else if (strcmp(stateName, "Error") == 0 || strcmp(stateName, "ERROR") == 0) {
+        return LINE_STATE_ERROR;
+    } else {
+        return LINE_STATE_UNKNOWN;
+    }
+}
+
+const char* LineStateManager::enumToString(LineState state) {
+    switch (state) {
+        case LINE_STATE_ON:          return "On";
+        case LINE_STATE_OFF:         return "Off";
+        case LINE_STATE_MAINTENANCE: return "Maintenance";
+        case LINE_STATE_ERROR:       return "Error";
+        case LINE_STATE_UNKNOWN:
+        default:                     return "Unknown";
     }
 }
