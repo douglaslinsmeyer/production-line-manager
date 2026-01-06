@@ -7,6 +7,10 @@
 // Forward declarations
 class ConnectionManager;
 class OTAManager;
+class ProfileManager;
+class ProfileStorage;
+class LineStateManager;
+class OutputController;
 
 /**
  * Device Web Server
@@ -58,10 +62,25 @@ public:
      */
     void setOTAManager(OTAManager* manager);
 
+    /**
+     * Set profile manager references
+     * Allows web server to access profile and state management
+     * @param profileMgr Pointer to ProfileManager instance
+     * @param profileStore Pointer to ProfileStorage instance
+     * @param stateMgr Pointer to LineStateManager instance
+     * @param outputCtrl Pointer to OutputController instance
+     */
+    void setProfileComponents(ProfileManager* profileMgr, ProfileStorage* profileStore,
+                             LineStateManager* stateMgr, OutputController* outputCtrl);
+
 private:
     WebServer* webServer;
     ConnectionManager* connectionManager;
     OTAManager* otaManager;
+    ProfileManager* profileManager;
+    ProfileStorage* profileStorage;
+    LineStateManager* lineState;
+    OutputController* outputController;
     bool running;
     uint16_t serverPort;
     unsigned long otaStartTime;
@@ -88,6 +107,18 @@ private:
     void handleOTAUploadData();
     void handleOTAProgress();
 
+    // Signal profile API handlers
+    void handleProfileView();
+    void handleStateView();
+    void handleStateSet();
+    void handleOverrideClear();
+    void handleOutputTest();
+
+    // Signal profile HTML page handlers
+    void handleProfilePage();
+    void handleStateControlPage();
+    void handleOutputTestPage();
+
     // HTML page generation
     String generateHomePage();
     String generateConfigPage();
@@ -96,6 +127,9 @@ private:
     String generateMQTTPage();
     String generateDevicePage();
     String generateOTAPage();
+    String generateProfilePage();
+    String generateStateControlPage();
+    String generateOutputTestPage();
 
     // Shared HTML components
     String getHTMLHeader(const char* title);

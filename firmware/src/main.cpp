@@ -15,6 +15,11 @@
 #include "state/line_state.h"
 #include "ota/ota_manager.h"
 #include "wifi/device_webserver.h"
+#include "profile/profile_storage.h"
+#include "profile/profile_manager.h"
+#include "profile/output_controller.h"
+#include "profile/profile_sync_manager.h"
+#include "buzzer/buzzer_controller.h"
 
 // Global managers
 ConnectionManager networkManager;
@@ -32,6 +37,13 @@ DisplayManager displayManager;
 OTAManager otaManager;
 DeviceWebServer deviceWebServer;
 
+// Signal Profile components
+ProfileStorage profileStorage;
+ProfileManager profileManager(&profileStorage);
+BuzzerController buzzerController(BUZZER_PIN);  // GPIO46
+OutputController* outputController = nullptr;  // Initialized after towerLight
+ProfileSyncManager profileSyncManager(&profileManager, &profileStorage);
+
 // Device identification (MAC address)
 char deviceMAC[18];  // Format: "XX:XX:XX:XX:XX:XX"
 
@@ -46,7 +58,7 @@ void onInputChange(uint8_t channel, bool state);
 void onNetworkConnection(bool connected);
 void onFlashIdentify();
 void onBootButtonLongPress(uint32_t duration);
-void onLineStateChange(LineState oldState, LineState newState);
+void onLineStateChange(const char* oldState, const char* newState);
 void onControlButtonShortPress();
 void onControlButtonLongPress();
 void onOTAProgress(uint8_t percent, OTAManager::OTAState state);
@@ -160,15 +172,61 @@ void setup() {
     Serial.println("✓ Device identification ready\n");
 
     // ===================================================================
-    // STEP 9a: Initialize Production Line State Manager
+    // STEP 9a: Initialize Signal Profile Components (BEFORE state manager)
     // ===================================================================
-    Serial.println("Initializing production line state manager...");
-    lineState.begin();
-    lineState.setStateChangeCallback(onLineStateChange);
-    Serial.printf("✓ Line state: %s\n\n", lineState.getStateString());
+    Serial.println("Initializing profile storage...");
+    profileStorage.begin();
+
+    // Load profile from NVS
+    if (profileManager.loadProfile()) {
+        Serial.printf("✓ Profile loaded: %s v%d\n",
+                     profileManager.getProfileName().c_str(),
+                     profileManager.getProfileVersion());
+    } else {
+        Serial.println("  No profile loaded - using legacy behavior");
+    }
+
+    // Initialize buzzer controller
+    buzzerController.begin();
+
+    // Initialize tower lights
+    Serial.println("Initializing tower lights...");
+    towerLight.begin();
+    Serial.println("✓ Tower lights ready");
+
+    // Initialize output controller (coordinates all outputs)
+    Serial.println("Initializing output controller...");
+    outputController = new OutputController(&towerLight, &buzzerController, &profileManager);
+    outputController->begin();
+
+    // Initialize profile sync manager
+    profileSyncManager.begin();
+    Serial.println("✓ Profile components ready\n");
 
     // ===================================================================
-    // STEP 9b: Initialize Control Button
+    // STEP 9b: Initialize Production Line State Manager
+    // ===================================================================
+    Serial.println("Initializing production line state manager...");
+    lineState.begin(&profileManager);
+    lineState.setStateChangeCallback(onLineStateChange);
+
+    // Apply initial state outputs if profile loaded
+    if (profileManager.hasProfile()) {
+        String currentState = profileStorage.getCurrentState();
+        if (currentState.length() == 0) {
+            currentState = profileManager.getDefaultState();
+            profileStorage.setCurrentState(currentState.c_str());
+        }
+        Serial.printf("Initial state: %s\n", currentState.c_str());
+
+        if (outputController != nullptr) {
+            outputController->applyStateOutputs(currentState.c_str());
+        }
+    }
+    Serial.printf("✓ Line state: %s\n\n", lineState.getState());
+
+    // ===================================================================
+    // STEP 9c: Initialize Control Button
     // ===================================================================
     Serial.println("Initializing control button...");
     controlButton.begin();
@@ -177,20 +235,12 @@ void setup() {
     Serial.println("✓ Control button ready\n");
 
     // ===================================================================
-    // STEP 9c: Initialize Button LED
+    // STEP 9d: Initialize Button LED
     // ===================================================================
     Serial.println("Initializing button LED...");
     buttonLED.begin();
-    buttonLED.setStatePattern(lineState.getState());
+    buttonLED.setStatePattern(lineState.getStateLegacy());
     Serial.println("✓ Button LED ready\n");
-
-    // ===================================================================
-    // STEP 9d: Initialize Tower Lights
-    // ===================================================================
-    Serial.println("Initializing tower lights...");
-    towerLight.begin();
-    towerLight.setStatePattern(lineState.getState());
-    Serial.println("✓ Tower lights ready\n");
 
     // ===================================================================
     // STEP 9e: Initialize Status LED (Network/MQTT Indicator)
@@ -263,6 +313,7 @@ void setup() {
     if (deviceWebServer.begin(80)) {
         deviceWebServer.setConnectionManager(&networkManager);
         deviceWebServer.setOTAManager(&otaManager);
+        deviceWebServer.setProfileComponents(&profileManager, &profileStorage, &lineState, outputController);
         Serial.println("✓ Device web server running on port 80");
         Serial.printf("  Access at: http://%s\n", networkManager.getIP().toString().c_str());
     } else {
@@ -355,6 +406,11 @@ void loop() {
     // Update button LED (pattern updates)
     buttonLED.update();
 
+    // Update output controller (blink patterns, buzzer chirp) - NON-BLOCKING
+    if (outputController != nullptr) {
+        outputController->update();
+    }
+
     // Update status LED (network/MQTT indicator patterns)
     statusLED.update();
 
@@ -443,7 +499,7 @@ void loop() {
                 inputs.getAllInputs(),
                 outputs.getAllOutputs(),
                 networkManager.isConnected(),
-                lineState.getState()
+                lineState.getStateLegacy()
             );
         }
     }
@@ -570,18 +626,18 @@ void onBootButtonLongPress(uint32_t duration) {
     // Visual/audio feedback will be added when integrated with DeviceIdentification
 }
 
-void onLineStateChange(LineState oldState, LineState newState) {
+void onLineStateChange(const char* oldState, const char* newState) {
     Serial.printf("\n========================================\n");
-    Serial.printf("  LINE STATE CHANGED: %s -> %s\n",
-                 LineStateManager::stateToString(oldState),
-                 LineStateManager::stateToString(newState));
+    Serial.printf("  LINE STATE CHANGED: %s -> %s\n", oldState, newState);
     Serial.printf("========================================\n\n");
 
-    // Update button LED pattern
-    buttonLED.setStatePattern(newState);
+    // Update button LED pattern (use legacy enum)
+    buttonLED.setStatePattern(LineStateManager::stringToEnum(newState));
 
-    // Update tower lights pattern
-    towerLight.setStatePattern(newState);
+    // Apply outputs if controller available
+    if (outputController != nullptr) {
+        outputController->applyStateOutputs(newState);
+    }
 
     // Publish state change immediately to MQTT (don't wait for heartbeat)
     if (mqtt.isConnected()) {
@@ -589,18 +645,59 @@ void onLineStateChange(LineState oldState, LineState newState) {
             inputs.getAllInputs(),
             outputs.getAllOutputs(),
             networkManager.isConnected(),
-            newState
+            LineStateManager::stringToEnum(newState)
         );
     }
 }
 
 void onControlButtonShortPress() {
     Serial.println("\n=== CONTROL BUTTON SHORT PRESS ===");
-    lineState.handleShortPress();
+
+    const char* newState = lineState.handleShortPress();
+    Serial.printf("New state: %s\n", newState);
+
+    // Apply outputs for new state
+    if (outputController != nullptr) {
+        outputController->applyStateOutputs(newState);
+    }
+
+    // Update storage
+    profileStorage.setCurrentState(newState);
+    profileStorage.setOverrideFlag(true);
+
+    // Publish via MQTT
+    if (mqtt.isConnected()) {
+        mqtt.publishStatus(
+            inputs.getAllInputs(),
+            outputs.getAllOutputs(),
+            networkManager.isConnected(),
+            lineState.getStateLegacy()
+        );
+    }
 }
 
 void onControlButtonLongPress() {
-    Serial.println("\n=== CONTROL BUTTON LONG PRESS (5s) ===");
-    Serial.println("Entering MAINTENANCE mode...");
-    lineState.handleLongPress();
+    Serial.println("\n=== CONTROL BUTTON LONG PRESS (1s) ===");
+
+    const char* newState = lineState.handleLongPress();
+    Serial.printf("New state: %s\n", newState);
+
+    // Apply outputs for new state
+    if (outputController != nullptr) {
+        outputController->applyStateOutputs(newState);
+    }
+
+    // Update storage
+    profileStorage.setCurrentState(newState);
+    profileStorage.setOverrideFlag(true);
+
+    // Publish via MQTT
+    if (mqtt.isConnected()) {
+        mqtt.publishStatus(
+            inputs.getAllInputs(),
+            outputs.getAllOutputs(),
+            networkManager.isConnected(),
+            lineState.getStateLegacy()
+        );
+    }
 }

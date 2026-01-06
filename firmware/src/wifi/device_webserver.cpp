@@ -3,6 +3,11 @@
 #include "wifi_utils.h"
 #include "network/connection_manager.h"
 #include "ota/ota_manager.h"
+#include "../profile/profile_manager.h"
+#include "../profile/profile_storage.h"
+#include "../state/line_state.h"
+#include "../profile/output_controller.h"
+#include <ArduinoJson.h>
 
 extern DeviceConfig deviceConfig;
 extern char deviceMAC[18];
@@ -11,6 +16,10 @@ DeviceWebServer::DeviceWebServer()
     : webServer(nullptr),
       connectionManager(nullptr),
       otaManager(nullptr),
+      profileManager(nullptr),
+      profileStorage(nullptr),
+      lineState(nullptr),
+      outputController(nullptr),
       running(false),
       serverPort(80),
       otaStartTime(0) {
@@ -50,6 +59,18 @@ bool DeviceWebServer::begin(uint16_t port) {
     );
     webServer->on("/ota/progress", [this]() { handleOTAProgress(); });
 
+    // Signal profile API endpoints
+    webServer->on("/profile", HTTP_GET, [this]() { handleProfileView(); });
+    webServer->on("/state", HTTP_GET, [this]() { handleStateView(); });
+    webServer->on("/state/set", HTTP_POST, [this]() { handleStateSet(); });
+    webServer->on("/override/clear", HTTP_POST, [this]() { handleOverrideClear(); });
+    webServer->on("/outputs/test", HTTP_POST, [this]() { handleOutputTest(); });
+
+    // Signal profile HTML pages
+    webServer->on("/profile-config", [this]() { handleProfilePage(); });
+    webServer->on("/state-control", [this]() { handleStateControlPage(); });
+    webServer->on("/output-test", [this]() { handleOutputTestPage(); });
+
     webServer->onNotFound([this]() { handleNotFound(); });
 
     webServer->begin();
@@ -83,6 +104,14 @@ void DeviceWebServer::setConnectionManager(ConnectionManager* manager) {
 
 void DeviceWebServer::setOTAManager(OTAManager* manager) {
     otaManager = manager;
+}
+
+void DeviceWebServer::setProfileComponents(ProfileManager* profileMgr, ProfileStorage* profileStore,
+                                           LineStateManager* stateMgr, OutputController* outputCtrl) {
+    profileManager = profileMgr;
+    profileStorage = profileStore;
+    lineState = stateMgr;
+    outputController = outputCtrl;
 }
 
 // HTTP Handlers
@@ -448,6 +477,9 @@ String DeviceWebServer::getNavigation() {
     <a href='/ethernet'>Ethernet</a>
     <a href='/mqtt'>MQTT</a>
     <a href='/device'>Device</a>
+    <a href='/profile-config'>Profile</a>
+    <a href='/state-control'>State</a>
+    <a href='/output-test'>Test</a>
 </div>
 )rawliteral";
 }
@@ -1147,6 +1179,496 @@ String DeviceWebServer::generateOTAPage() {
     html += "      }";
     html += "    })";
     html += "    .catch(e => console.error('Progress fetch error:', e));";
+    html += "}";
+    html += "</script>";
+
+    html += "</div>";
+    html += getHTMLFooter();
+    return html;
+}
+
+// ============================================================================
+// Signal Profile API Handlers
+// ============================================================================
+
+void DeviceWebServer::handleProfileView() {
+    if (!profileManager || !profileManager->hasProfile()) {
+        webServer->send(404, "application/json", "{\"error\":\"No profile loaded\"}");
+        return;
+    }
+
+    String profileJson;
+    if (profileStorage->loadProfile(profileJson)) {
+        webServer->send(200, "application/json", profileJson);
+    } else {
+        webServer->send(500, "application/json", "{\"error\":\"Failed to load profile\"}");
+    }
+}
+
+void DeviceWebServer::handleStateView() {
+    String json = "{";
+    json += "\"currentState\":\"" + String(lineState->getState()) + "\",";
+    json += "\"isOverridden\":" + String(profileStorage->getOverrideFlag() ? "true" : "false") + ",";
+    json += "\"profileId\":\"" + profileStorage->getProfileId() + "\",";
+    json += "\"profileVersion\":" + String(profileStorage->getProfileVersion());
+
+    // Add available states if profile loaded
+    if (profileManager && profileManager->hasProfile()) {
+        json += ",\"availableStates\":[";
+
+        String profileJson;
+        profileStorage->loadProfile(profileJson);
+        JsonDocument doc;
+        deserializeJson(doc, profileJson);
+
+        JsonArrayConst states = doc["states"];
+        bool first = true;
+        for (JsonObjectConst state : states) {
+            if (!first) json += ",";
+            json += "\"" + String(state["name"].as<const char*>()) + "\"";
+            first = false;
+        }
+        json += "]";
+    }
+
+    json += "}";
+    webServer->send(200, "application/json", json);
+}
+
+void DeviceWebServer::handleStateSet() {
+    if (!webServer->hasArg("state")) {
+        webServer->send(400, "application/json",
+                       "{\"success\":false,\"error\":\"Missing 'state' parameter\"}");
+        return;
+    }
+
+    String stateName = webServer->arg("state");
+
+    if (!lineState || !profileManager->isValidState(stateName.c_str())) {
+        webServer->send(400, "application/json",
+                       "{\"success\":false,\"error\":\"Invalid state name\"}");
+        return;
+    }
+
+    // Set state
+    lineState->setState(stateName.c_str(), "webui");
+    profileStorage->setCurrentState(stateName.c_str());
+    profileStorage->setOverrideFlag(true);
+
+    // Apply outputs
+    if (outputController) {
+        outputController->applyStateOutputs(stateName.c_str());
+    }
+
+    webServer->send(200, "application/json",
+                   "{\"success\":true,\"state\":\"" + stateName + "\"}");
+}
+
+void DeviceWebServer::handleOverrideClear() {
+    profileStorage->setOverrideFlag(false);
+
+    // Return to default state
+    if (profileManager && profileManager->hasProfile()) {
+        const char* defaultState = profileManager->getDefaultState();
+        lineState->setState(defaultState, "webui_clear");
+        profileStorage->setCurrentState(defaultState);
+
+        if (outputController) {
+            outputController->applyStateOutputs(defaultState);
+        }
+
+        webServer->send(200, "application/json",
+                       "{\"success\":true,\"state\":\"" + String(defaultState) + "\"}");
+    } else {
+        webServer->send(200, "application/json",
+                       "{\"success\":true,\"state\":\"unknown\"}");
+    }
+}
+
+void DeviceWebServer::handleOutputTest() {
+    // Parse JSON body
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, webServer->arg("plain"));
+
+    if (error) {
+        webServer->send(400, "application/json",
+                       "{\"success\":false,\"error\":\"Invalid JSON\"}");
+        return;
+    }
+
+    bool red = doc["red"] | false;
+    bool yellow = doc["yellow"] | false;
+    bool green = doc["green"] | false;
+    bool buzzer = doc["buzzer"] | false;
+
+    if (outputController) {
+        outputController->testOutputs(red, yellow, green, buzzer);
+        webServer->send(200, "application/json", "{\"success\":true}");
+    } else {
+        webServer->send(500, "application/json",
+                       "{\"success\":false,\"error\":\"Output controller not initialized\"}");
+    }
+}
+
+// ============================================================================
+// Signal Profile HTML Page Handlers
+// ============================================================================
+
+void DeviceWebServer::handleProfilePage() {
+    webServer->send(200, "text/html", generateProfilePage());
+}
+
+void DeviceWebServer::handleStateControlPage() {
+    webServer->send(200, "text/html", generateStateControlPage());
+}
+
+void DeviceWebServer::handleOutputTestPage() {
+    webServer->send(200, "text/html", generateOutputTestPage());
+}
+
+// ============================================================================
+// Signal Profile HTML Page Generators
+// ============================================================================
+
+String DeviceWebServer::generateProfilePage() {
+    String html = getHTMLHeader("Signal Profile");
+    html += "<div class='container'>";
+    html += getNavigation();
+
+    if (!profileManager || !profileManager->hasProfile()) {
+        html += "<div class='warning-box'>";
+        html += "No signal profile loaded. Device is using default behavior.";
+        html += "</div>";
+        html += "</div>";
+        html += getHTMLFooter();
+        return html;
+    }
+
+    // Profile info card
+    html += "<div class='card'>";
+    html += "<h2>Profile Information</h2>";
+    html += "<table>";
+    html += "<tr><th>Property</th><th>Value</th></tr>";
+    html += "<tr><td>Profile Name</td><td>" + profileManager->getProfileName() + "</td></tr>";
+    html += "<tr><td>Profile ID</td><td style='font-family:monospace;font-size:12px;'>" + profileManager->getProfileId() + "</td></tr>";
+    html += "<tr><td>Version</td><td>" + String(profileManager->getProfileVersion()) + "</td></tr>";
+    html += "<tr><td>Default State</td><td><strong>" + String(profileManager->getDefaultState()) + "</strong></td></tr>";
+    html += "<tr><td>Total States</td><td>" + String(profileManager->getStateCount()) + "</td></tr>";
+    html += "</table>";
+    html += "</div>";
+
+    // States configuration card
+    html += "<div class='card'>";
+    html += "<h2>States & Output Configuration</h2>";
+    html += "<div id='statesContainer'></div>";
+    html += "</div>";
+
+    // Button behavior card
+    html += "<div class='card'>";
+    html += "<h2>Button Behavior</h2>";
+    html += "<div id='buttonBehavior'></div>";
+    html += "</div>";
+
+    // Add CSS for cycle list
+    html += "<style>";
+    html += ".cycle-list { background:#f7fafc; padding:15px; border-radius:6px; }";
+    html += ".cycle-item { padding:8px; margin-bottom:5px; background:white; ";
+    html += "  border-left:3px solid #667eea; border-radius:4px; }";
+    html += "</style>";
+
+    // JavaScript to load and render profile
+    html += "<script>";
+    html += "fetch('/profile').then(r => r.json()).then(renderProfile);";
+    html += "function renderProfile(profile) {";
+    html += "  renderStates(profile.states);";
+    html += "  renderButtonBehavior(profile.buttonBehavior);";
+    html += "}";
+
+    // Render states function
+    html += "function renderStates(states) {";
+    html += "  let html = '<table><thead><tr>';";
+    html += "  html += '<th>State</th><th>Red</th><th>Yellow</th><th>Green</th><th>Buzzer</th>';";
+    html += "  html += '</tr></thead><tbody>';";
+    html += "  states.forEach(s => {";
+    html += "    html += '<tr>';";
+    html += "    html += '<td><strong>' + s.name + '</strong></td>';";
+    html += "    html += '<td>' + formatOutput(s.outputs.redLight, 'red') + '</td>';";
+    html += "    html += '<td>' + formatOutput(s.outputs.yellowLight, 'yellow') + '</td>';";
+    html += "    html += '<td>' + formatOutput(s.outputs.greenLight, 'green') + '</td>';";
+    html += "    html += '<td>' + formatBuzzer(s.outputs.buzzer) + '</td>';";
+    html += "    html += '</tr>';";
+    html += "  });";
+    html += "  html += '</tbody></table>';";
+    html += "  document.getElementById('statesContainer').innerHTML = html;";
+    html += "}";
+
+    // Format output helper
+    html += "function formatOutput(mode, color) {";
+    html += "  const colors = {red:'#f56565', yellow:'#ed8936', green:'#48bb78'};";
+    html += "  const icons = {off:'○', on:'●', shortBlink:'◐', longBlink:'◑'};";
+    html += "  const bg = mode === 'off' ? '#eee' : colors[color];";
+    html += "  const text = mode === 'off' ? '#999' : 'white';";
+    html += "  let span = '<span style=\"display:inline-block;padding:4px 12px;border-radius:4px;";
+    html += "    background:' + bg + ';color:' + text + ';font-size:12px;font-weight:600;\">';";
+    html += "  return span + icons[mode] + ' ' + mode + '</span>';";
+    html += "}";
+
+    // Format buzzer helper
+    html += "function formatBuzzer(mode) {";
+    html += "  const icons = {off:'🔇', on:'🔊', chirp:'🔔'};";
+    html += "  const colors = {off:'#eee', on:'#f56565', chirp:'#ed8936'};";
+    html += "  const text = {off:'#999', on:'white', chirp:'white'};";
+    html += "  let span = '<span style=\"display:inline-block;padding:4px 12px;border-radius:4px;";
+    html += "    background:' + colors[mode] + ';color:' + text[mode] + ';font-size:12px;font-weight:600;\">';";
+    html += "  return span + icons[mode] + ' ' + mode + '</span>';";
+    html += "}";
+
+    // Render button behavior
+    html += "function renderButtonBehavior(behavior) {";
+    html += "  let html = '<div style=\"display:grid;grid-template-columns:1fr 1fr;gap:20px;\">';";
+    html += "  html += '<div>';";
+    html += "  html += '<h3 style=\"color:#667eea;margin-bottom:10px;\">Short Press Cycle</h3>';";
+    html += "  html += '<div class=\"cycle-list\">';";
+    html += "  behavior.shortPressCycle.forEach((s, i) => {";
+    html += "    html += '<div class=\"cycle-item\">' + (i+1) + '. ' + s + '</div>';";
+    html += "  });";
+    html += "  html += '</div></div>';";
+    html += "  html += '<div>';";
+    html += "  html += '<h3 style=\"color:#667eea;margin-bottom:10px;\">Long Press Cycle</h3>';";
+    html += "  html += '<div class=\"cycle-list\">';";
+    html += "  behavior.longPressCycle.forEach((s, i) => {";
+    html += "    html += '<div class=\"cycle-item\">' + (i+1) + '. ' + s + '</div>';";
+    html += "  });";
+    html += "  html += '</div></div>';";
+    html += "  html += '</div>';";
+    html += "  document.getElementById('buttonBehavior').innerHTML = html;";
+    html += "}";
+    html += "</script>";
+
+    html += "</div>";
+    html += getHTMLFooter();
+    return html;
+}
+
+String DeviceWebServer::generateStateControlPage() {
+    String html = getHTMLHeader("State Control");
+    html += "<div class='container'>";
+    html += getNavigation();
+
+    if (!profileManager || !profileManager->hasProfile()) {
+        html += "<div class='warning-box'>";
+        html += "No signal profile loaded. State control unavailable.";
+        html += "</div>";
+        html += "</div>";
+        html += getHTMLFooter();
+        return html;
+    }
+
+    // Current state card
+    html += "<div class='card'>";
+    html += "<h2>Current State</h2>";
+    html += "<div id='currentStateDisplay' style='text-align:center;padding:30px;'>";
+    html += "<div id='stateValue' style='font-size:36px;font-weight:bold;color:#667eea;'>Loading...</div>";
+    html += "<div id='overrideIndicator' style='margin-top:15px;'></div>";
+    html += "</div>";
+    html += "</div>";
+
+    // State selector card
+    html += "<div class='card'>";
+    html += "<h2>Manual State Control</h2>";
+    html += "<div class='info-box'>";
+    html += "Manually setting state creates an override. The device will remain in this state ";
+    html += "until changed via button press, backend command, or override is cleared.";
+    html += "</div>";
+    html += "<div id='message' class='message'></div>";
+    html += "<form id='stateForm' onsubmit='setState(event)'>";
+    html += "<div class='form-group'>";
+    html += "<label>Select State:</label>";
+    html += "<select id='stateSelector' name='state' style='width:100%;padding:12px;border:2px solid #ddd;";
+    html += "  border-radius:6px;font-size:14px;'>";
+    html += "<option value=''>-- Loading states --</option>";
+    html += "</select>";
+    html += "</div>";
+    html += "<button type='submit' class='btn btn-success'>Set State</button>";
+    html += "<button type='button' class='btn btn-danger' onclick='clearOverride()' id='clearBtn' disabled>";
+    html += "Clear Override & Return to Default</button>";
+    html += "</form>";
+    html += "</div>";
+
+    // JavaScript
+    html += "<script>";
+    html += "let currentStateData = null;";
+
+    // Load current state
+    html += "function loadState() {";
+    html += "  fetch('/state').then(r => r.json()).then(data => {";
+    html += "    currentStateData = data;";
+    html += "    document.getElementById('stateValue').textContent = data.currentState;";
+    html += "    ";
+    html += "    if (data.isOverridden) {";
+    html += "      document.getElementById('overrideIndicator').innerHTML = ";
+    html += "        '<span class=\"status-badge\" style=\"background:#fed7d7;color:#742a2a;\">";
+    html += "        ⚠ OVERRIDE ACTIVE</span>';";
+    html += "      document.getElementById('clearBtn').disabled = false;";
+    html += "    } else {";
+    html += "      document.getElementById('overrideIndicator').innerHTML = ";
+    html += "        '<span class=\"status-badge\" style=\"background:#c6f6d5;color:#22543d;\">";
+    html += "        ✓ Normal Operation</span>';";
+    html += "      document.getElementById('clearBtn').disabled = true;";
+    html += "    }";
+    html += "    ";
+    html += "    if (data.availableStates) {";
+    html += "      const select = document.getElementById('stateSelector');";
+    html += "      select.innerHTML = '';";
+    html += "      data.availableStates.forEach(s => {";
+    html += "        const opt = document.createElement('option');";
+    html += "        opt.value = s;";
+    html += "        opt.textContent = s;";
+    html += "        if (s === data.currentState) opt.selected = true;";
+    html += "        select.appendChild(opt);";
+    html += "      });";
+    html += "    }";
+    html += "  });";
+    html += "}";
+
+    // Set state
+    html += "function setState(e) {";
+    html += "  e.preventDefault();";
+    html += "  const state = document.getElementById('stateSelector').value;";
+    html += "  const data = new URLSearchParams({state: state});";
+    html += "  fetch('/state/set', {method: 'POST', body: data})";
+    html += "    .then(r => r.json())";
+    html += "    .then(d => {";
+    html += "      const msg = document.getElementById('message');";
+    html += "      msg.textContent = d.success ? 'State changed to: ' + d.state : 'Error: ' + d.error;";
+    html += "      msg.className = 'message ' + (d.success ? 'success' : 'error');";
+    html += "      if (d.success) setTimeout(loadState, 500);";
+    html += "    });";
+    html += "}";
+
+    // Clear override
+    html += "function clearOverride() {";
+    html += "  if (!confirm('Clear override and return to default state?')) return;";
+    html += "  fetch('/override/clear', {method: 'POST'})";
+    html += "    .then(r => r.json())";
+    html += "    .then(d => {";
+    html += "      const msg = document.getElementById('message');";
+    html += "      msg.textContent = 'Override cleared. Returned to state: ' + d.state;";
+    html += "      msg.className = 'message success';";
+    html += "      setTimeout(loadState, 500);";
+    html += "    });";
+    html += "}";
+
+    html += "loadState();";
+    html += "setInterval(loadState, 5000);";  // Refresh every 5 seconds
+    html += "</script>";
+
+    html += "</div>";
+    html += getHTMLFooter();
+    return html;
+}
+
+String DeviceWebServer::generateOutputTestPage() {
+    String html = getHTMLHeader("Output Testing");
+    html += "<div class='container'>";
+    html += getNavigation();
+
+    html += "<div class='warning-box'>";
+    html += "⚠ <strong>WARNING:</strong> Output testing directly controls hardware outputs, ";
+    html += "bypassing the signal profile. Use for hardware verification only.";
+    html += "</div>";
+
+    // Tower lights card
+    html += "<div class='card'>";
+    html += "<h2>Tower Lights</h2>";
+    html += "<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-bottom:20px;'>";
+
+    // Red light
+    html += "<div style='text-align:center;'>";
+    html += "<div style='width:80px;height:80px;border-radius:50%;background:#f56565;";
+    html += "  margin:0 auto 10px;box-shadow:0 4px 10px rgba(245,101,101,0.3);opacity:0.3;' id='redPreview'></div>";
+    html += "<label style='display:block;margin-bottom:8px;font-weight:600;'>Red Light</label>";
+    html += "<button class='btn' id='redBtn' onclick='toggleLight(\"red\")' ";
+    html += "  style='width:100%;background:#f56565;'>OFF</button>";
+    html += "</div>";
+
+    // Yellow light
+    html += "<div style='text-align:center;'>";
+    html += "<div style='width:80px;height:80px;border-radius:50%;background:#ed8936;";
+    html += "  margin:0 auto 10px;opacity:0.3;box-shadow:0 4px 10px rgba(237,137,54,0.3);' id='yellowPreview'></div>";
+    html += "<label style='display:block;margin-bottom:8px;font-weight:600;'>Yellow Light</label>";
+    html += "<button class='btn' id='yellowBtn' onclick='toggleLight(\"yellow\")' ";
+    html += "  style='width:100%;background:#ed8936;'>OFF</button>";
+    html += "</div>";
+
+    // Green light
+    html += "<div style='text-align:center;'>";
+    html += "<div style='width:80px;height:80px;border-radius:50%;background:#48bb78;";
+    html += "  margin:0 auto 10px;opacity:0.3;box-shadow:0 4px 10px rgba(72,187,120,0.3);' id='greenPreview'></div>";
+    html += "<label style='display:block;margin-bottom:8px;font-weight:600;'>Green Light</label>";
+    html += "<button class='btn' id='greenBtn' onclick='toggleLight(\"green\")' ";
+    html += "  style='width:100%;background:#48bb78;'>OFF</button>";
+    html += "</div>";
+
+    html += "</div>";
+    html += "</div>";
+
+    // Buzzer card
+    html += "<div class='card'>";
+    html += "<h2>Buzzer</h2>";
+    html += "<div style='text-align:center;padding:20px;'>";
+    html += "<div style='font-size:48px;margin-bottom:20px;' id='buzzerPreview'>🔇</div>";
+    html += "<button class='btn' id='buzzerBtn' onclick='toggleBuzzer()' ";
+    html += "  style='background:#718096;'>OFF</button>";
+    html += "</div>";
+    html += "</div>";
+
+    // All off button
+    html += "<div class='card'>";
+    html += "<h2>Quick Actions</h2>";
+    html += "<button class='btn btn-danger' onclick='allOff()' style='width:100%;'>Turn All Outputs OFF</button>";
+    html += "</div>";
+
+    // JavaScript
+    html += "<script>";
+    html += "const state = {red:false, yellow:false, green:false, buzzer:false};";
+
+    html += "function toggleLight(color) {";
+    html += "  state[color] = !state[color];";
+    html += "  updateOutputs();";
+    html += "  updateUI();";
+    html += "}";
+
+    html += "function toggleBuzzer() {";
+    html += "  state.buzzer = !state.buzzer;";
+    html += "  updateOutputs();";
+    html += "  updateUI();";
+    html += "}";
+
+    html += "function allOff() {";
+    html += "  state.red = state.yellow = state.green = state.buzzer = false;";
+    html += "  updateOutputs();";
+    html += "  updateUI();";
+    html += "}";
+
+    html += "function updateOutputs() {";
+    html += "  fetch('/outputs/test', {";
+    html += "    method: 'POST',";
+    html += "    headers: {'Content-Type': 'application/json'},";
+    html += "    body: JSON.stringify(state)";
+    html += "  });";
+    html += "}";
+
+    html += "function updateUI() {";
+    html += "  document.getElementById('redBtn').textContent = state.red ? 'ON' : 'OFF';";
+    html += "  document.getElementById('yellowBtn').textContent = state.yellow ? 'ON' : 'OFF';";
+    html += "  document.getElementById('greenBtn').textContent = state.green ? 'ON' : 'OFF';";
+    html += "  document.getElementById('buzzerBtn').textContent = state.buzzer ? 'ON' : 'OFF';";
+    html += "  ";
+    html += "  document.getElementById('redPreview').style.opacity = state.red ? '1' : '0.3';";
+    html += "  document.getElementById('yellowPreview').style.opacity = state.yellow ? '1' : '0.3';";
+    html += "  document.getElementById('greenPreview').style.opacity = state.green ? '1' : '0.3';";
+    html += "  document.getElementById('buzzerPreview').textContent = state.buzzer ? '🔊' : '🔇';";
     html += "}";
     html += "</script>";
 
