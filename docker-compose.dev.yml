@@ -106,8 +106,8 @@ services:
       - ./web:/app
       - /app/node_modules
     environment:
-      VITE_API_BASE_URL: http://192.168.68.123:8080/api/v1
-      VITE_MQTT_WS_URL: ws://192.168.68.123:9001
+      VITE_API_BASE_URL: http://localhost:8080/api/v1
+      VITE_MQTT_WS_URL: ws://localhost:9001
     depends_on:
       - api
     networks:

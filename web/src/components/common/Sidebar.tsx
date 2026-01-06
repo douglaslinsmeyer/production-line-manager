@@ -8,6 +8,7 @@ import {
   CalendarDaysIcon,
   DocumentTextIcon,
   CpuChipIcon,
+  SignalIcon,
   XMarkIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
@@ -43,6 +44,11 @@ const navigationItems: NavItem[] = [
     name: 'Devices',
     path: '/devices',
     icon: CpuChipIcon,
+  },
+  {
+    name: 'Signal Profiles',
+    path: '/signal-profiles',
+    icon: SignalIcon,
   },
   {
     name: 'Schedules',

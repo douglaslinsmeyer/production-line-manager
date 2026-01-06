@@ -11,6 +11,10 @@ import CreateSchedule from './pages/CreateSchedule';
 import ScheduleDetail from './pages/ScheduleDetail';
 import EditSchedule from './pages/EditSchedule';
 import DeviceDiscovery from './pages/DeviceDiscovery';
+import SignalProfilesPage from './pages/SignalProfilesPage';
+import CreateSignalProfile from './pages/CreateSignalProfile';
+import SignalProfileDetail from './pages/SignalProfileDetail';
+import EditSignalProfile from './pages/EditSignalProfile';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -29,6 +33,10 @@ function App() {
           <Route path="/schedules/new" element={<CreateSchedule />} />
           <Route path="/schedules/:id" element={<ScheduleDetail />} />
           <Route path="/schedules/:id/edit" element={<EditSchedule />} />
+          <Route path="/signal-profiles" element={<SignalProfilesPage />} />
+          <Route path="/signal-profiles/new" element={<CreateSignalProfile />} />
+          <Route path="/signal-profiles/:id" element={<SignalProfileDetail />} />
+          <Route path="/signal-profiles/:id/edit" element={<EditSignalProfile />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Layout>

@@ -394,3 +394,85 @@ export interface DailyComplianceKPI {
   is_working_day: boolean;
   source: string;
 }
+
+// Signal Profiles
+export type LightMode = 'off' | 'on' | 'shortBlink' | 'longBlink';
+export type BuzzerMode = 'off' | 'on' | 'chirp';
+
+export interface ProfileStateOutputs {
+  redLight: LightMode;
+  yellowLight: LightMode;
+  greenLight: LightMode;
+  buzzer: BuzzerMode;
+}
+
+export interface ProfileState {
+  name: string;
+  outputs: ProfileStateOutputs;
+}
+
+export interface ButtonBehavior {
+  shortPressCycle: string[];
+  longPressCycle: string[];
+}
+
+export interface SignalProfile {
+  id: string;
+  name: string;
+  description?: string;
+  version: number;
+  states: ProfileState[];
+  buttonBehavior: ButtonBehavior;
+  defaultState: string;
+  created_at: string;
+  updated_at: string;
+  updated_by?: string;
+}
+
+export interface CreateSignalProfileRequest {
+  name: string;
+  description?: string;
+  states: ProfileState[];
+  buttonBehavior: ButtonBehavior;
+  defaultState: string;
+}
+
+export interface UpdateSignalProfileRequest {
+  name?: string;
+  description?: string;
+  states?: ProfileState[];
+  buttonBehavior?: ButtonBehavior;
+  defaultState?: string;
+}
+
+export interface ProfileVersion {
+  id: string;
+  profile_id: string;
+  version: number;
+  config: SignalProfile;
+  changed_by: string;
+  change_description?: string;
+  changes: string[];
+  created_at: string;
+}
+
+export interface DeviceVersionStatus {
+  device_mac: string;
+  device_id: string;
+  version: number;
+  status: 'up-to-date' | 'update-pending' | 'failed' | 'offline';
+  last_check: string;
+  assigned_line?: string;
+}
+
+export interface ProfileDeviceStatusResponse {
+  profile_id: string;
+  current_version: number;
+  devices: DeviceVersionStatus[];
+  summary: {
+    up_to_date: number;
+    update_pending: number;
+    failed: number;
+    offline: number;
+  };
+}
