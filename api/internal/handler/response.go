@@ -26,12 +26,13 @@ type Meta struct {
 
 // Error codes
 const (
-	ErrCodeNotFound     = "NOT_FOUND"
-	ErrCodeBadRequest   = "BAD_REQUEST"
-	ErrCodeConflict     = "CONFLICT"
-	ErrCodeInternal     = "INTERNAL_ERROR"
-	ErrCodeValidation   = "VALIDATION_ERROR"
-	ErrCodeInvalidID    = "INVALID_ID"
+	ErrCodeNotFound        = "NOT_FOUND"
+	ErrCodeBadRequest      = "BAD_REQUEST"
+	ErrCodeInvalidRequest  = "INVALID_REQUEST"
+	ErrCodeConflict        = "CONFLICT"
+	ErrCodeInternal        = "INTERNAL_ERROR"
+	ErrCodeValidation      = "VALIDATION_ERROR"
+	ErrCodeInvalidID       = "INVALID_ID"
 )
 
 // writeJSON writes a success response with data

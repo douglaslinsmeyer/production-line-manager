@@ -39,4 +39,17 @@ var (
 	ErrInvalidDateRange       = errors.New("start date must be before or equal to end date")
 	ErrMissingLinesToException = errors.New("line exception must specify at least one line")
 	ErrLineNotAssignedSchedule = errors.New("line is not assigned to this schedule")
+
+	// Signal Profile errors
+	ErrProfileNotFound          = errors.New("signal profile not found")
+	ErrProfileNameExists        = errors.New("signal profile name already exists")
+	ErrProfileInUse             = errors.New("profile is assigned to one or more lines")
+	ErrProfileVersionNotFound   = errors.New("profile version not found")
+	ErrInvalidProfileState      = errors.New("invalid profile state configuration")
+	ErrInvalidButtonCycle       = errors.New("button cycle references non-existent state")
+	ErrInvalidDefaultState      = errors.New("default state does not exist in profile")
+	ErrDeviceStateNotFound      = errors.New("device signal state not found")
+	ErrProfileNotAssignedToLine = errors.New("line does not have a profile assigned")
+	ErrInvalidLightMode         = errors.New("invalid light mode value")
+	ErrInvalidBuzzerMode        = errors.New("invalid buzzer mode value")
 )

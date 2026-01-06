@@ -24,6 +24,7 @@ func NewRouter(
 	scheduleService *service.ScheduleService,
 	complianceService *service.ComplianceService,
 	deviceHandler *DeviceHandler,
+	profileService *service.SignalProfileService,
 	sseHandler SSEHandler,
 	corsOrigins string,
 	logger *zap.Logger,
@@ -44,7 +45,8 @@ func NewRouter(
 
 	// Create handlers
 	healthHandler := NewHealthHandler()
-	lineHandler := NewLineHandler(lineService, logger)
+	profileHandler := NewSignalProfileHandler(profileService, logger)
+	lineHandler := NewLineHandler(lineService, profileService, logger)
 	labelHandler := NewLabelHandler(labelService, logger)
 	analyticsHandler := NewAnalyticsHandler(analyticsService, logger)
 	scheduleHandler := NewScheduleHandler(scheduleService, logger)
@@ -62,6 +64,23 @@ func NewRouter(
 	r.Route("/api/v1", func(r chi.Router) {
 		// Server-Sent Events stream for real-time updates
 		r.Get("/events/stream", sseHandler.ServeSSE)
+
+		// Signal Profiles
+		r.Route("/profiles", func(r chi.Router) {
+			r.Get("/", profileHandler.List)
+			r.Post("/", profileHandler.Create)
+
+			r.Route("/{id}", func(r chi.Router) {
+				r.Get("/", profileHandler.Get)
+				r.Put("/", profileHandler.Update)
+				r.Delete("/", profileHandler.Delete)
+
+				// Version management
+				r.Get("/versions", profileHandler.GetVersions)
+				r.Post("/rollback", profileHandler.Rollback)
+				r.Get("/device-status", profileHandler.GetDeviceStatus)
+			})
+		})
 
 		// Production lines
 		r.Route("/lines", func(r chi.Router) {
@@ -83,6 +102,10 @@ func NewRouter(
 
 				// Schedule assignment
 				r.Put("/schedule", scheduleHandler.AssignScheduleToLine)
+
+				// Signal profile assignment
+				r.Put("/profile", lineHandler.AssignProfile)
+				r.Get("/profile", lineHandler.GetProfile)
 			})
 		})
 
@@ -185,6 +208,10 @@ func NewRouter(
 		r.Route("/devices", func(r chi.Router) {
 			r.Get("/", deviceHandler.ListDevices)
 
+			// Device override operations
+			r.Get("/overridden", profileHandler.GetOverriddenDevices)
+			r.Post("/bulk-reset-override", profileHandler.BulkResetOverrides)
+
 			r.Route("/{mac}", func(r chi.Router) {
 				r.Get("/", deviceHandler.GetDevice)
 				r.Delete("/", deviceHandler.DeleteDevice)
@@ -192,6 +219,13 @@ func NewRouter(
 				r.Delete("/assign", deviceHandler.UnassignDevice)
 				r.Post("/identify", deviceHandler.IdentifyDevice)
 				r.Post("/command", deviceHandler.SendCommand)
+
+				// Signal profile endpoints
+				r.Post("/heartbeat", profileHandler.DeviceHeartbeat)
+				r.Post("/profile-updated", profileHandler.DeviceProfileUpdated)
+				r.Get("/signal-state", profileHandler.GetDeviceState)
+				r.Put("/signal-state", profileHandler.SetDeviceState)
+				r.Post("/reset-override", profileHandler.ResetDeviceOverride)
 			})
 		})
 

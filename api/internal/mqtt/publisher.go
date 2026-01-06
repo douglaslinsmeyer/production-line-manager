@@ -159,3 +159,111 @@ func (p *Publisher) broadcastToSSE(eventType string, event interface{}) {
 		zap.String("event_type", eventType),
 		zap.Int("client_count", p.sseHub.ClientCount()))
 }
+
+// ========== Signal Profile Publishing Methods ==========
+
+// PublishProfileCreated publishes a signal profile created event
+func (p *Publisher) PublishProfileCreated(profile *domain.SignalProfile) error {
+	event := struct {
+		Type      string                 `json:"type"`
+		Timestamp time.Time              `json:"timestamp"`
+		Data      *domain.SignalProfile  `json:"data"`
+	}{
+		Type:      "created",
+		Timestamp: time.Now(),
+		Data:      profile,
+	}
+
+	if err := p.publishEvent(TopicProfileCreated, event); err != nil {
+		return err
+	}
+
+	// Also broadcast to SSE clients
+	p.broadcastToSSE("profile.created", event)
+	return nil
+}
+
+// PublishProfileUpdated publishes a signal profile updated event
+func (p *Publisher) PublishProfileUpdated(profile *domain.SignalProfile, affectedDevices int) error {
+	event := struct {
+		Type             string                 `json:"type"`
+		Timestamp        time.Time              `json:"timestamp"`
+		Data             *domain.SignalProfile  `json:"data"`
+		AffectedDevices  int                    `json:"affected_devices"`
+	}{
+		Type:            "updated",
+		Timestamp:       time.Now(),
+		Data:            profile,
+		AffectedDevices: affectedDevices,
+	}
+
+	if err := p.publishEvent(TopicProfileUpdated, event); err != nil {
+		return err
+	}
+
+	// Also broadcast to SSE clients
+	p.broadcastToSSE("profile.updated", event)
+	return nil
+}
+
+// PublishProfileDeleted publishes a signal profile deleted event
+func (p *Publisher) PublishProfileDeleted(id uuid.UUID, name string) error {
+	event := struct {
+		Type      string    `json:"type"`
+		Timestamp time.Time `json:"timestamp"`
+		ID        uuid.UUID `json:"id"`
+		Name      string    `json:"name"`
+	}{
+		Type:      "deleted",
+		Timestamp: time.Now(),
+		ID:        id,
+		Name:      name,
+	}
+
+	if err := p.publishEvent(TopicProfileDeleted, event); err != nil {
+		return err
+	}
+
+	// Also broadcast to SSE clients
+	p.broadcastToSSE("profile.deleted", event)
+	return nil
+}
+
+// PublishProfileAssigned publishes a profile assignment to line event
+func (p *Publisher) PublishProfileAssigned(lineID uuid.UUID, profile *domain.SignalProfile) error {
+	event := struct {
+		Type      string                 `json:"type"`
+		Timestamp time.Time              `json:"timestamp"`
+		LineID    uuid.UUID              `json:"line_id"`
+		Profile   *domain.SignalProfile  `json:"profile"`
+	}{
+		Type:      "assigned",
+		Timestamp: time.Now(),
+		LineID:    lineID,
+		Profile:   profile,
+	}
+
+	if err := p.publishEvent(TopicProfileAssigned, event); err != nil {
+		return err
+	}
+
+	// Also broadcast to SSE clients
+	p.broadcastToSSE("profile.assigned", event)
+	return nil
+}
+
+// PublishDeviceProfileUpdate sends profile update command to specific device
+func (p *Publisher) PublishDeviceProfileUpdate(deviceMAC string, profile *domain.SignalProfile) error {
+	// Create device-specific command
+	command := struct {
+		Command string                 `json:"command"`
+		Profile *domain.SignalProfile  `json:"profile"`
+	}{
+		Command: "update_profile",
+		Profile: profile,
+	}
+
+	// Publish to device-specific command topic
+	topic := fmt.Sprintf("devices/%s/command", deviceMAC)
+	return p.publishEvent(topic, command)
+}

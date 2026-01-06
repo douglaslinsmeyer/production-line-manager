@@ -16,15 +16,17 @@ import (
 
 // LineHandler handles HTTP requests for production lines
 type LineHandler struct {
-	service *service.LineService
-	logger  *zap.Logger
+	service        *service.LineService
+	profileService *service.SignalProfileService
+	logger         *zap.Logger
 }
 
 // NewLineHandler creates a new LineHandler
-func NewLineHandler(service *service.LineService, logger *zap.Logger) *LineHandler {
+func NewLineHandler(service *service.LineService, profileService *service.SignalProfileService, logger *zap.Logger) *LineHandler {
 	return &LineHandler{
-		service: service,
-		logger:  logger,
+		service:        service,
+		profileService: profileService,
+		logger:         logger,
 	}
 }
 
@@ -336,4 +338,101 @@ func (h *LineHandler) GetStatusHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeList(w, history, len(history))
+}
+
+// AssignProfile godoc
+// @Summary Assign signal profile to line
+// @Description Assign a signal profile to a production line
+// @Tags lines
+// @Accept json
+// @Produce json
+// @Param id path string true "Production Line ID (UUID)"
+// @Param request body domain.AssignProfileToLineRequest true "Profile assignment"
+// @Success 200 {object} Response{data=map[string]bool}
+// @Failure 400 {object} Response{error=APIError}
+// @Failure 404 {object} Response{error=APIError}
+// @Failure 500 {object} Response{error=APIError}
+// @Router /lines/{id}/profile [put]
+func (h *LineHandler) AssignProfile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Parse ID from URL
+	idStr := chi.URLParam(r, "id")
+	lineID, err := uuid.Parse(idStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, ErrCodeInvalidID, "Invalid production line ID", nil)
+		return
+	}
+
+	// Parse request body
+	var req domain.AssignProfileToLineRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, ErrCodeInvalidRequest, "Invalid request body", nil)
+		return
+	}
+
+	// Assign profile to line
+	err = h.profileService.AssignToLine(ctx, lineID, req.ProfileID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			writeError(w, http.StatusNotFound, ErrCodeNotFound, "Production line not found", nil)
+			return
+		}
+		if errors.Is(err, domain.ErrProfileNotFound) {
+			writeError(w, http.StatusNotFound, ErrCodeNotFound, "Signal profile not found", nil)
+			return
+		}
+		h.logger.Error("failed to assign profile to line",
+			zap.String("line_id", lineID.String()),
+			zap.String("profile_id", req.ProfileID.String()),
+			zap.Error(err))
+		writeError(w, http.StatusInternalServerError, ErrCodeInternal, "Failed to assign profile", nil)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]bool{"success": true})
+}
+
+// GetProfile godoc
+// @Summary Get line's signal profile
+// @Description Get the signal profile assigned to a production line
+// @Tags lines
+// @Accept json
+// @Produce json
+// @Param id path string true "Production Line ID (UUID)"
+// @Success 200 {object} Response{data=domain.SignalProfile}
+// @Failure 400 {object} Response{error=APIError}
+// @Failure 404 {object} Response{error=APIError}
+// @Failure 500 {object} Response{error=APIError}
+// @Router /lines/{id}/profile [get]
+func (h *LineHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Parse ID from URL
+	idStr := chi.URLParam(r, "id")
+	lineID, err := uuid.Parse(idStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, ErrCodeInvalidID, "Invalid production line ID", nil)
+		return
+	}
+
+	// Get line's profile
+	profile, err := h.profileService.GetLineProfile(ctx, lineID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			writeError(w, http.StatusNotFound, ErrCodeNotFound, "Production line not found", nil)
+			return
+		}
+		if errors.Is(err, domain.ErrProfileNotAssignedToLine) {
+			writeError(w, http.StatusNotFound, ErrCodeNotFound, "No profile assigned to this line", nil)
+			return
+		}
+		h.logger.Error("failed to get line profile",
+			zap.String("line_id", lineID.String()),
+			zap.Error(err))
+		writeError(w, http.StatusInternalServerError, ErrCodeInternal, "Failed to get profile", nil)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, profile)
 }

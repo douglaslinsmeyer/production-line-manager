@@ -77,6 +77,7 @@ func main() {
 	scheduleRepo := repository.NewScheduleRepository(db)
 	complianceRepo := repository.NewComplianceRepository(db, scheduleRepo)
 	deviceRepo := repository.NewDeviceRepository(db)
+	signalProfileRepo := repository.NewSignalProfileRepository(db)
 
 	// Setup MQTT client
 	log.Info("Connecting to MQTT broker...", zap.String("broker", cfg.MQTTBrokerURL))
@@ -113,6 +114,7 @@ func main() {
 	analyticsService := service.NewAnalyticsService(analyticsRepo, lineRepo, log)
 	scheduleService := service.NewScheduleService(scheduleRepo, lineRepo, holidaysClient, cfg.HolidaysCountryCode, log)
 	complianceService := service.NewComplianceService(complianceRepo, lineRepo, log)
+	signalProfileService := service.NewSignalProfileService(signalProfileRepo, lineRepo, deviceRepo, mqttPublisher, log)
 
 	// Setup device discovery handler (after lineService is created)
 	deviceDiscoveryHandler := mqtt.NewDeviceDiscoveryHandler(deviceRepo, mqttPublisher, lineService, log)
@@ -140,6 +142,7 @@ func main() {
 		scheduleService,
 		complianceService,
 		deviceHandler,
+		signalProfileService,
 		sseHandler,
 		cfg.CORSAllowedOrigins,
 		log,
