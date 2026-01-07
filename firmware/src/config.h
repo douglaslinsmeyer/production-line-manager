@@ -55,8 +55,8 @@
 
 // Device Identification Pins
 #define GPIO_RGB_LED 38                    // GPIO38 - RGB LED
-#define GPIO_BUZZER 46                     // GPIO46 - Buzzer
-#define BUZZER_PIN GPIO_BUZZER             // Alias for signal profiles
+#define GPIO_BUZZER 46                     // GPIO46 - Primary Buzzer (signal profiles)
+#define BUZZER_PIN GPIO_BUZZER             // Alias for signal profiles primary buzzer
 #define CONTROL_BUTTON_LONG_PRESS 5000     // 5 seconds for long press (maintenance mode)
 #define BUTTON_LED_CHANNEL 4               // EXIO5 (TCA9554PWR channel 4, 0-indexed)
 
@@ -65,8 +65,8 @@
 #define TOWER_LIGHT_YELLOW_CHANNEL 1       // D02 (DOUT2) - Yellow
 #define TOWER_LIGHT_GREEN_CHANNEL  2       // D03 (DOUT3) - Green
 
-// Status LED Configuration (Network/MQTT indicator on DO4)
-#define STATUS_LED_CHANNEL 3               // D04 (DOUT4, Channel 3, 0-indexed)
+// Tower Buzzer Configuration (User-controllable buzzer on DO4)
+#define TOWER_BUZZER_CHANNEL 3             // D04 (DOUT4, Channel 3, 0-indexed)
 
 // Button LED Pattern Timing
 #define BUTTON_LED_MAINTENANCE_PERIOD 500  // 500ms blink for maintenance

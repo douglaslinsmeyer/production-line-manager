@@ -1299,10 +1299,12 @@ void DeviceWebServer::handleOutputTest() {
     bool red = doc["red"] | false;
     bool yellow = doc["yellow"] | false;
     bool green = doc["green"] | false;
-    bool buzzer = doc["buzzer"] | false;
+    // Support both old "buzzer" field and new separate buzzer fields
+    bool primaryBuzzer = doc["primaryBuzzer"] | doc["buzzer"] | false;
+    bool towerBuzzer = doc["towerBuzzer"] | doc["buzzer"] | false;
 
     if (outputController) {
-        outputController->testOutputs(red, yellow, green, buzzer);
+        outputController->testOutputs(red, yellow, green, primaryBuzzer, towerBuzzer);
         webServer->send(200, "application/json", "{\"success\":true}");
     } else {
         webServer->send(500, "application/json",

@@ -147,7 +147,19 @@ bool ProfileManager::getStateOutputs(const char* stateName, StateOutputs& output
             outputs.redLight = parseLightMode(stateOutputs["redLight"]);
             outputs.yellowLight = parseLightMode(stateOutputs["yellowLight"]);
             outputs.greenLight = parseLightMode(stateOutputs["greenLight"]);
-            outputs.buzzer = parseBuzzerMode(stateOutputs["buzzer"]);
+
+            // Backward compatibility: Check for new dual-buzzer fields first,
+            // fall back to old "buzzer" field if not present
+            if (!stateOutputs["primaryBuzzer"].isNull() || !stateOutputs["towerBuzzer"].isNull()) {
+                // New schema with separate buzzer fields
+                outputs.primaryBuzzer = parseBuzzerMode(stateOutputs["primaryBuzzer"]);
+                outputs.towerBuzzer = parseBuzzerMode(stateOutputs["towerBuzzer"]);
+            } else {
+                // Old schema: single "buzzer" field controls both buzzers
+                BuzzerMode buzzerMode = parseBuzzerMode(stateOutputs["buzzer"]);
+                outputs.primaryBuzzer = buzzerMode;
+                outputs.towerBuzzer = buzzerMode;
+            }
 
             return true;
         }

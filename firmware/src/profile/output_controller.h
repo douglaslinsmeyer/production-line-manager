@@ -4,16 +4,17 @@
 #include "profile_manager.h"
 #include "../gpio/tower_light.h"
 #include "../buzzer/buzzer_controller.h"
+#include "../gpio/tower_buzzer_controller.h"
 
 /**
  * Output Controller
  *
- * Coordinates all device outputs (tower lights and buzzer) based on
+ * Coordinates all device outputs (tower lights and buzzers) based on
  * signal profile state configurations.
  *
  * Responsibilities:
  * - Look up state output configuration from ProfileManager
- * - Apply configuration to TowerLightManager and BuzzerController
+ * - Apply configuration to TowerLightManager, BuzzerController, and TowerBuzzerController
  * - Coordinate update() calls for non-blocking patterns
  *
  * Usage:
@@ -24,7 +25,8 @@
 class OutputController {
 public:
     OutputController(TowerLightManager* towerLight,
-                    BuzzerController* buzzer,
+                    BuzzerController* primaryBuzzer,
+                    TowerBuzzerController* towerBuzzer,
                     ProfileManager* profileMgr);
 
     /**
@@ -56,12 +58,14 @@ public:
      * @param redOn Red light on/off
      * @param yellowOn Yellow light on/off
      * @param greenOn Green light on/off
-     * @param buzzerOn Buzzer on/off
+     * @param primaryBuzzerOn Primary buzzer (GPIO46) on/off
+     * @param towerBuzzerOn Tower buzzer (DO4) on/off
      */
-    void testOutputs(bool redOn, bool yellowOn, bool greenOn, bool buzzerOn);
+    void testOutputs(bool redOn, bool yellowOn, bool greenOn, bool primaryBuzzerOn, bool towerBuzzerOn);
 
 private:
     TowerLightManager* towerLight;
-    BuzzerController* buzzer;
+    BuzzerController* primaryBuzzer;     // GPIO46
+    TowerBuzzerController* towerBuzzer;  // DO4
     ProfileManager* profileManager;
 };

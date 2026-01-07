@@ -38,7 +38,8 @@ public:
         LightMode redLight;
         LightMode yellowLight;
         LightMode greenLight;
-        BuzzerMode buzzer;
+        BuzzerMode primaryBuzzer;  // GPIO46 (was "buzzer")
+        BuzzerMode towerBuzzer;    // DO4 (new)
     };
 
     ProfileManager(ProfileStorage* storage);

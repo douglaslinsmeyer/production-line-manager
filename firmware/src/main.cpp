@@ -8,7 +8,7 @@
 #include "gpio/control_button.h"
 #include "gpio/button_led.h"
 #include "gpio/tower_light.h"
-#include "gpio/status_led.h"
+#include "gpio/tower_buzzer_controller.h"
 #include "display/display_manager.h"
 #include "mqtt/mqtt_client.h"
 #include "identification.h"
@@ -32,7 +32,6 @@ LineStateManager lineState;
 ControlButton controlButton;
 ButtonLED buttonLED(&outputs);
 TowerLightManager towerLight(&outputs);
-StatusLEDController statusLED(&outputs);
 DisplayManager displayManager;
 OTAManager otaManager;
 DeviceWebServer deviceWebServer;
@@ -40,7 +39,8 @@ DeviceWebServer deviceWebServer;
 // Signal Profile components
 ProfileStorage profileStorage;
 ProfileManager profileManager(&profileStorage);
-BuzzerController buzzerController(BUZZER_PIN);  // GPIO46
+BuzzerController primaryBuzzer(BUZZER_PIN);  // GPIO46 (signal profiles primary)
+TowerBuzzerController towerBuzzer(&outputs, TOWER_BUZZER_CHANNEL);  // DO4 (signal profiles secondary)
 OutputController* outputController = nullptr;  // Initialized after towerLight
 ProfileSyncManager profileSyncManager(&profileManager, &profileStorage);
 
@@ -186,8 +186,13 @@ void setup() {
         Serial.println("  No profile loaded - using legacy behavior");
     }
 
-    // Initialize buzzer controller
-    buzzerController.begin();
+    // Initialize primary buzzer controller (GPIO46)
+    primaryBuzzer.begin();
+
+    // Initialize tower buzzer controller (DO4)
+    Serial.println("Initializing tower buzzer...");
+    towerBuzzer.begin();
+    Serial.println("✓ Tower buzzer ready (DO4)");
 
     // Initialize tower lights
     Serial.println("Initializing tower lights...");
@@ -196,7 +201,7 @@ void setup() {
 
     // Initialize output controller (coordinates all outputs)
     Serial.println("Initializing output controller...");
-    outputController = new OutputController(&towerLight, &buzzerController, &profileManager);
+    outputController = new OutputController(&towerLight, &primaryBuzzer, &towerBuzzer, &profileManager);
     outputController->begin();
 
     // Initialize profile sync manager
@@ -243,14 +248,7 @@ void setup() {
     Serial.println("✓ Button LED ready\n");
 
     // ===================================================================
-    // STEP 9e: Initialize Status LED (Network/MQTT Indicator)
-    // ===================================================================
-    Serial.println("Initializing status LED...");
-    statusLED.begin();
-    Serial.println("✓ Status LED ready\n");
-
-    // ===================================================================
-    // STEP 10: Display PSRAM Info
+    // STEP 9e: Display PSRAM Info
     // ===================================================================
     Serial.printf("PSRAM Size: %d bytes\n", ESP.getPsramSize());
     Serial.printf("Free PSRAM: %d bytes\n\n", ESP.getFreePsram());
@@ -380,9 +378,8 @@ void loop() {
 
     // Check if OTA is in progress - skip GPIO/MQTT operations during update
     if (otaManager.getState() == OTAManager::OTA_IN_PROGRESS) {
-        // Only update display and status LED during OTA
+        // Only update display during OTA
         displayManager.update();
-        statusLED.update();
         delay(10);  // Keep watchdog happy
         return;  // Skip all GPIO/MQTT operations
     }
@@ -410,9 +407,6 @@ void loop() {
     if (outputController != nullptr) {
         outputController->update();
     }
-
-    // Update status LED (network/MQTT indicator patterns)
-    statusLED.update();
 
     // Update display (network/MQTT status)
     // Skip normal updates during boot sequence to prevent flickering
@@ -469,17 +463,6 @@ void loop() {
 
     // Update digital inputs (debouncing + change detection)
     inputs.update();
-
-    // Update status LED based on network and MQTT connectivity
-    if (networkManager.isInAPMode()) {
-        statusLED.setConnectionStatus(STATUS_AP_MODE);
-    } else if (networkManager.isConnected() && mqtt.isConnected()) {
-        statusLED.setConnectionStatus(STATUS_CONNECTED);
-    } else if (networkManager.isConnected()) {
-        statusLED.setConnectionStatus(STATUS_NO_MQTT);
-    } else {
-        statusLED.setConnectionStatus(STATUS_NO_NETWORK);
-    }
 
     // Periodic device announcement (every 60 seconds)
     if (millis() - lastAnnouncement > 60000) {
