@@ -46,7 +46,7 @@ bool DigitalOutputManager::begin() {
 
 bool DigitalOutputManager::setOutput(uint8_t channel, bool state) {
     if (channel >= 8) {
-        Serial.printf("Invalid channel %d (must be 0-7)\n", channel);
+        Serial.printf("[DigitalOutput] Invalid channel %d (must be 0-7)\n", channel);
         return false;
     }
 
@@ -55,11 +55,16 @@ bool DigitalOutputManager::setOutput(uint8_t channel, bool state) {
     // - state=false (want LED OFF) → write 1 (HIGH) → transistor off → LED OFF
     bool invertedState = !state;
 
+    uint8_t oldState = outputState;
     if (invertedState) {
         outputState |= (1 << channel);
     } else {
         outputState &= ~(1 << channel);
     }
+
+    Serial.printf("[DigitalOutput] CH%d=%s (inverted=%s, reg: 0x%02X->0x%02X)\n",
+                 channel, state ? "ON" : "OFF", invertedState ? "1" : "0",
+                 oldState, outputState);
 
     return writeRegister(TCA9554_OUTPUT_REG, outputState);
 }

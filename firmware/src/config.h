@@ -61,9 +61,10 @@
 #define BUTTON_LED_CHANNEL 4               // EXIO5 (TCA9554PWR channel 4, 0-indexed)
 
 // Tower Light Configuration (Stack Light D01/D02/D03)
-#define TOWER_LIGHT_RED_CHANNEL    0       // D01 (DOUT1) - Red
+// Physical wiring: DO1=Green, DO2=Yellow, DO3=Red
+#define TOWER_LIGHT_RED_CHANNEL    2       // D03 (DOUT3) - Red
 #define TOWER_LIGHT_YELLOW_CHANNEL 1       // D02 (DOUT2) - Yellow
-#define TOWER_LIGHT_GREEN_CHANNEL  2       // D03 (DOUT3) - Green
+#define TOWER_LIGHT_GREEN_CHANNEL  0       // D01 (DOUT1) - Green
 
 // Tower Buzzer Configuration (User-controllable buzzer on DO4)
 #define TOWER_BUZZER_CHANNEL 3             // D04 (DOUT4, Channel 3, 0-indexed)

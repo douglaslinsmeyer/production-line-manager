@@ -34,7 +34,6 @@ ButtonLED buttonLED(&outputs);
 TowerLightManager towerLight(&outputs);
 DisplayManager displayManager;
 OTAManager otaManager;
-DeviceWebServer deviceWebServer;
 
 // Signal Profile components
 ProfileStorage profileStorage;
@@ -305,17 +304,19 @@ void setup() {
     }
 
     // ===================================================================
-    // STEP 14: Initialize Device Web Server
+    // STEP 14: Configure Device Web Server (already started by ConnectionManager)
     // ===================================================================
-    Serial.println("Initializing device web server...");
-    if (deviceWebServer.begin(80)) {
-        deviceWebServer.setConnectionManager(&networkManager);
-        deviceWebServer.setOTAManager(&otaManager);
-        deviceWebServer.setProfileComponents(&profileManager, &profileStorage, &lineState, outputController);
-        Serial.println("✓ Device web server running on port 80");
+    Serial.println("Configuring device web server components...");
+    // Get the web server instance from ConnectionManager (it's already been started)
+    DeviceWebServer* deviceWebServer = networkManager.getWebServer();
+    if (deviceWebServer) {
+        // Set profile-related components (ConnectionManager already set connection/OTA managers)
+        deviceWebServer->setOTAManager(&otaManager);
+        deviceWebServer->setProfileComponents(&profileManager, &profileStorage, &lineState, outputController);
+        Serial.println("✓ Device web server components configured");
         Serial.printf("  Access at: http://%s\n", networkManager.getIP().toString().c_str());
     } else {
-        Serial.println("✗ WARNING: Device web server failed to start");
+        Serial.println("✗ WARNING: Device web server not available from ConnectionManager");
     }
 
     Serial.println("\n==============================================");
@@ -373,8 +374,7 @@ void loop() {
         }
     }
 
-    // Update web server (handles HTTP requests) - always runs
-    deviceWebServer.update();
+    // Note: Web server update is handled by ConnectionManager::update()
 
     // Check if OTA is in progress - skip GPIO/MQTT operations during update
     if (otaManager.getState() == OTAManager::OTA_IN_PROGRESS) {

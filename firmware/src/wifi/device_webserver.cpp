@@ -112,6 +112,7 @@ void DeviceWebServer::setProfileComponents(ProfileManager* profileMgr, ProfileSt
     profileStorage = profileStore;
     lineState = stateMgr;
     outputController = outputCtrl;
+    Serial.printf("[DeviceWebServer] Profile components set - OutputController: %p\n", outputController);
 }
 
 // HTTP Handlers
@@ -1286,27 +1287,26 @@ void DeviceWebServer::handleOverrideClear() {
 }
 
 void DeviceWebServer::handleOutputTest() {
-    // Parse JSON body
-    JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, webServer->arg("plain"));
+    Serial.printf("[WebServer] POST /outputs/test (outputController=%p)\n", outputController);
 
-    if (error) {
-        webServer->send(400, "application/json",
-                       "{\"success\":false,\"error\":\"Invalid JSON\"}");
-        return;
-    }
+    // Parse form parameters (form-encoded data, not JSON)
+    // ESP32 WebServer handles form-encoded data automatically
+    bool red = webServer->hasArg("red") && webServer->arg("red") == "true";
+    bool yellow = webServer->hasArg("yellow") && webServer->arg("yellow") == "true";
+    bool green = webServer->hasArg("green") && webServer->arg("green") == "true";
+    bool primaryBuzzer = webServer->hasArg("primaryBuzzer") && webServer->arg("primaryBuzzer") == "true";
+    bool towerBuzzer = webServer->hasArg("towerBuzzer") && webServer->arg("towerBuzzer") == "true";
 
-    bool red = doc["red"] | false;
-    bool yellow = doc["yellow"] | false;
-    bool green = doc["green"] | false;
-    // Support both old "buzzer" field and new separate buzzer fields
-    bool primaryBuzzer = doc["primaryBuzzer"] | doc["buzzer"] | false;
-    bool towerBuzzer = doc["towerBuzzer"] | doc["buzzer"] | false;
+    Serial.printf("  Red: %s, Yellow: %s, Green: %s, Primary: %s, Tower: %s\n",
+                  red ? "ON" : "OFF", yellow ? "ON" : "OFF", green ? "ON" : "OFF",
+                  primaryBuzzer ? "ON" : "OFF", towerBuzzer ? "ON" : "OFF");
 
     if (outputController) {
         outputController->testOutputs(red, yellow, green, primaryBuzzer, towerBuzzer);
         webServer->send(200, "application/json", "{\"success\":true}");
+        Serial.println("  ✓ Test outputs applied successfully");
     } else {
+        Serial.printf("[WebServer] ERROR: Output controller not initialized (pointer is %p)\n", outputController);
         webServer->send(500, "application/json",
                        "{\"success\":false,\"error\":\"Output controller not initialized\"}");
     }
@@ -1675,11 +1675,22 @@ String DeviceWebServer::generateOutputTestPage() {
     html += "}";
 
     html += "function updateOutputs() {";
+    html += "  const data = new URLSearchParams({";
+    html += "    red: state.red,";
+    html += "    yellow: state.yellow,";
+    html += "    green: state.green,";
+    html += "    primaryBuzzer: state.primaryBuzzer,";
+    html += "    towerBuzzer: state.towerBuzzer";
+    html += "  });";
     html += "  fetch('/outputs/test', {";
     html += "    method: 'POST',";
-    html += "    headers: {'Content-Type': 'application/json'},";
-    html += "    body: JSON.stringify(state)";
-    html += "  });";
+    html += "    body: data";
+    html += "  })";
+    html += "  .then(r => r.json())";
+    html += "  .then(d => {";
+    html += "    if (!d.success) console.error('Output test failed:', d.error);";
+    html += "  })";
+    html += "  .catch(e => console.error('Network error:', e));";
     html += "}";
 
     html += "function updateUI() {";

@@ -23,10 +23,11 @@
  */
 class TowerLightManager {
 public:
-    // Tower light channels
-    static const uint8_t CHANNEL_RED = 0;
-    static const uint8_t CHANNEL_YELLOW = 1;
-    static const uint8_t CHANNEL_GREEN = 2;
+    // Tower light channels (mapped to physical wiring)
+    // Physical: DO1=Green, DO2=Yellow, DO3=Red
+    static const uint8_t CHANNEL_RED = 2;      // D03 (DOUT3)
+    static const uint8_t CHANNEL_YELLOW = 1;   // D02 (DOUT2)
+    static const uint8_t CHANNEL_GREEN = 0;    // D01 (DOUT1)
 
     // Blink intervals (milliseconds)
     static const uint16_t SHORT_BLINK_INTERVAL = 500;

@@ -25,10 +25,7 @@ void TowerLightManager::setFromProfile(const ProfileManager::StateOutputs& outpu
     yellowMode = outputs.yellowLight;
     greenMode = outputs.greenLight;
 
-    // Reset blink state and timers to start fresh
-    redState = false;
-    yellowState = false;
-    greenState = false;
+    // Reset blink timers
     lastRedToggle = millis();
     lastYellowToggle = millis();
     lastGreenToggle = millis();
@@ -38,10 +35,21 @@ void TowerLightManager::setFromProfile(const ProfileManager::StateOutputs& outpu
                  ProfileManager::lightModeToString(yellowMode),
                  ProfileManager::lightModeToString(greenMode));
 
-    // Apply initial state immediately
-    updateLight(CHANNEL_RED, redMode, redState, lastRedToggle);
-    updateLight(CHANNEL_YELLOW, yellowMode, yellowState, lastYellowToggle);
-    updateLight(CHANNEL_GREEN, greenMode, greenState, lastGreenToggle);
+    // Set initial state based on mode (don't assume current state)
+    // For ON mode, set to true; for OFF mode, set to false; for blink, start with false
+    redState = (redMode == ProfileManager::LIGHT_ON);
+    yellowState = (yellowMode == ProfileManager::LIGHT_ON);
+    greenState = (greenMode == ProfileManager::LIGHT_ON);
+
+    // Apply initial state immediately by forcing hardware write
+    this->outputs->setOutput(CHANNEL_RED, redState);
+    this->outputs->setOutput(CHANNEL_YELLOW, yellowState);
+    this->outputs->setOutput(CHANNEL_GREEN, greenState);
+
+    Serial.printf("[TowerLight] Hardware state: CH0=%s CH1=%s CH2=%s\n",
+                 redState ? "ON" : "OFF",
+                 yellowState ? "ON" : "OFF",
+                 greenState ? "ON" : "OFF");
 }
 
 void TowerLightManager::update() {
