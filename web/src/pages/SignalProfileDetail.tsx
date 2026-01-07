@@ -120,7 +120,7 @@ export default function SignalProfileDetail() {
                 </div>
                 <p className="text-sm text-gray-600 mt-1">
                   R:{state.outputs.redLight} Y:{state.outputs.yellowLight} G:
-                  {state.outputs.greenLight} Buzzer:{state.outputs.buzzer}
+                  {state.outputs.greenLight} PB:{state.outputs.primaryBuzzer} TB:{state.outputs.towerBuzzer}
                 </p>
               </div>
             </div>

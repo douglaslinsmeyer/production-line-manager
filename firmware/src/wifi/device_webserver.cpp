@@ -1389,7 +1389,7 @@ String DeviceWebServer::generateProfilePage() {
     // Render states function
     html += "function renderStates(states) {";
     html += "  let html = '<table><thead><tr>';";
-    html += "  html += '<th>State</th><th>Red</th><th>Yellow</th><th>Green</th><th>Buzzer</th>';";
+    html += "  html += '<th>State</th><th>Red</th><th>Yellow</th><th>Green</th><th>Primary Buzzer</th><th>Tower Buzzer</th>';";
     html += "  html += '</tr></thead><tbody>';";
     html += "  states.forEach(s => {";
     html += "    html += '<tr>';";
@@ -1397,7 +1397,8 @@ String DeviceWebServer::generateProfilePage() {
     html += "    html += '<td>' + formatOutput(s.outputs.redLight, 'red') + '</td>';";
     html += "    html += '<td>' + formatOutput(s.outputs.yellowLight, 'yellow') + '</td>';";
     html += "    html += '<td>' + formatOutput(s.outputs.greenLight, 'green') + '</td>';";
-    html += "    html += '<td>' + formatBuzzer(s.outputs.buzzer) + '</td>';";
+    html += "    html += '<td>' + formatBuzzer(s.outputs.primaryBuzzer || s.outputs.buzzer || 'off') + '</td>';";
+    html += "    html += '<td>' + formatBuzzer(s.outputs.towerBuzzer || s.outputs.buzzer || 'off') + '</td>';";
     html += "    html += '</tr>';";
     html += "  });";
     html += "  html += '</tbody></table>';";
@@ -1617,11 +1618,25 @@ String DeviceWebServer::generateOutputTestPage() {
 
     // Buzzer card
     html += "<div class='card'>";
-    html += "<h2>Buzzer</h2>";
-    html += "<div style='text-align:center;padding:20px;'>";
-    html += "<div style='font-size:48px;margin-bottom:20px;' id='buzzerPreview'>🔇</div>";
-    html += "<button class='btn' id='buzzerBtn' onclick='toggleBuzzer()' ";
-    html += "  style='background:#718096;'>OFF</button>";
+    html += "<h2>Buzzers</h2>";
+    html += "<div style='display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:20px;'>";
+
+    // Primary Buzzer
+    html += "<div style='text-align:center;'>";
+    html += "<div style='font-size:48px;margin-bottom:10px;' id='primaryBuzzerPreview'>🔇</div>";
+    html += "<label style='display:block;margin-bottom:8px;font-weight:600;'>Primary Buzzer (GPIO46)</label>";
+    html += "<button class='btn' id='primaryBuzzerBtn' onclick='togglePrimaryBuzzer()' ";
+    html += "  style='width:100%;background:#718096;'>OFF</button>";
+    html += "</div>";
+
+    // Tower Buzzer
+    html += "<div style='text-align:center;'>";
+    html += "<div style='font-size:48px;margin-bottom:10px;' id='towerBuzzerPreview'>🔇</div>";
+    html += "<label style='display:block;margin-bottom:8px;font-weight:600;'>Tower Buzzer (DO4)</label>";
+    html += "<button class='btn' id='towerBuzzerBtn' onclick='toggleTowerBuzzer()' ";
+    html += "  style='width:100%;background:#718096;'>OFF</button>";
+    html += "</div>";
+
     html += "</div>";
     html += "</div>";
 
@@ -1633,7 +1648,7 @@ String DeviceWebServer::generateOutputTestPage() {
 
     // JavaScript
     html += "<script>";
-    html += "const state = {red:false, yellow:false, green:false, buzzer:false};";
+    html += "const state = {red:false, yellow:false, green:false, primaryBuzzer:false, towerBuzzer:false};";
 
     html += "function toggleLight(color) {";
     html += "  state[color] = !state[color];";
@@ -1641,14 +1656,20 @@ String DeviceWebServer::generateOutputTestPage() {
     html += "  updateUI();";
     html += "}";
 
-    html += "function toggleBuzzer() {";
-    html += "  state.buzzer = !state.buzzer;";
+    html += "function togglePrimaryBuzzer() {";
+    html += "  state.primaryBuzzer = !state.primaryBuzzer;";
+    html += "  updateOutputs();";
+    html += "  updateUI();";
+    html += "}";
+
+    html += "function toggleTowerBuzzer() {";
+    html += "  state.towerBuzzer = !state.towerBuzzer;";
     html += "  updateOutputs();";
     html += "  updateUI();";
     html += "}";
 
     html += "function allOff() {";
-    html += "  state.red = state.yellow = state.green = state.buzzer = false;";
+    html += "  state.red = state.yellow = state.green = state.primaryBuzzer = state.towerBuzzer = false;";
     html += "  updateOutputs();";
     html += "  updateUI();";
     html += "}";
@@ -1665,12 +1686,14 @@ String DeviceWebServer::generateOutputTestPage() {
     html += "  document.getElementById('redBtn').textContent = state.red ? 'ON' : 'OFF';";
     html += "  document.getElementById('yellowBtn').textContent = state.yellow ? 'ON' : 'OFF';";
     html += "  document.getElementById('greenBtn').textContent = state.green ? 'ON' : 'OFF';";
-    html += "  document.getElementById('buzzerBtn').textContent = state.buzzer ? 'ON' : 'OFF';";
+    html += "  document.getElementById('primaryBuzzerBtn').textContent = state.primaryBuzzer ? 'ON' : 'OFF';";
+    html += "  document.getElementById('towerBuzzerBtn').textContent = state.towerBuzzer ? 'ON' : 'OFF';";
     html += "  ";
     html += "  document.getElementById('redPreview').style.opacity = state.red ? '1' : '0.3';";
     html += "  document.getElementById('yellowPreview').style.opacity = state.yellow ? '1' : '0.3';";
     html += "  document.getElementById('greenPreview').style.opacity = state.green ? '1' : '0.3';";
-    html += "  document.getElementById('buzzerPreview').textContent = state.buzzer ? '🔊' : '🔇';";
+    html += "  document.getElementById('primaryBuzzerPreview').textContent = state.primaryBuzzer ? '🔊' : '🔇';";
+    html += "  document.getElementById('towerBuzzerPreview').textContent = state.towerBuzzer ? '🔊' : '🔇';";
     html += "}";
     html += "</script>";
 

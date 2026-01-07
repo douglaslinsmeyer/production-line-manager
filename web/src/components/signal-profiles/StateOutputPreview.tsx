@@ -39,14 +39,14 @@ export default function StateOutputPreview({ outputs, className = '' }: StateOut
     return offColors[color as keyof typeof offColors];
   };
 
-  const getBuzzerClass = () => {
-    if (outputs.buzzer === 'off') {
+  const getBuzzerClass = (buzzerMode: string) => {
+    if (buzzerMode === 'off') {
       return 'text-gray-300';
     }
-    if (outputs.buzzer === 'on') {
+    if (buzzerMode === 'on') {
       return 'text-blue-600';
     }
-    if (outputs.buzzer === 'chirp') {
+    if (buzzerMode === 'chirp') {
       return 'text-blue-600 animate-pulse';
     }
     return 'text-gray-300';
@@ -70,13 +70,25 @@ export default function StateOutputPreview({ outputs, className = '' }: StateOut
         />
       </div>
 
-      {/* Buzzer Indicator */}
-      <div className="flex flex-col items-center">
-        <SpeakerWaveIcon
-          className={`w-6 h-6 ${getBuzzerClass()}`}
-          title={`Buzzer: ${outputs.buzzer}`}
-        />
-        <span className="text-xs text-gray-500 mt-1">{outputs.buzzer}</span>
+      {/* Buzzer Indicators - Side by side */}
+      <div className="flex gap-3">
+        {/* Primary Buzzer */}
+        <div className="flex flex-col items-center">
+          <SpeakerWaveIcon
+            className={`w-6 h-6 ${getBuzzerClass(outputs.primaryBuzzer)}`}
+            title={`Primary Buzzer (GPIO46): ${outputs.primaryBuzzer}`}
+          />
+          <span className="text-xs text-gray-500 mt-1">Primary</span>
+        </div>
+
+        {/* Tower Buzzer */}
+        <div className="flex flex-col items-center">
+          <SpeakerWaveIcon
+            className={`w-6 h-6 ${getBuzzerClass(outputs.towerBuzzer)}`}
+            title={`Tower Buzzer (DO4): ${outputs.towerBuzzer}`}
+          />
+          <span className="text-xs text-gray-500 mt-1">Tower</span>
+        </div>
       </div>
     </div>
   );

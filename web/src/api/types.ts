@@ -403,7 +403,8 @@ export interface ProfileStateOutputs {
   redLight: LightMode;
   yellowLight: LightMode;
   greenLight: LightMode;
-  buzzer: BuzzerMode;
+  primaryBuzzer: BuzzerMode;  // GPIO46
+  towerBuzzer: BuzzerMode;    // DO4
 }
 
 export interface ProfileState {

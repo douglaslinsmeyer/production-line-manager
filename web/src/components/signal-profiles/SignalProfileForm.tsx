@@ -12,7 +12,8 @@ const stateOutputsSchema = z.object({
   redLight: z.enum(['off', 'on', 'shortBlink', 'longBlink']),
   yellowLight: z.enum(['off', 'on', 'shortBlink', 'longBlink']),
   greenLight: z.enum(['off', 'on', 'shortBlink', 'longBlink']),
-  buzzer: z.enum(['off', 'on', 'chirp']),
+  primaryBuzzer: z.enum(['off', 'on', 'chirp']),
+  towerBuzzer: z.enum(['off', 'on', 'chirp']),
 });
 
 const profileStateSchema = z.object({
@@ -77,11 +78,11 @@ export default function SignalProfileForm({
       states: [
         {
           name: 'On',
-          outputs: { redLight: 'off', yellowLight: 'off', greenLight: 'on', buzzer: 'off' },
+          outputs: { redLight: 'off', yellowLight: 'off', greenLight: 'on', primaryBuzzer: 'off', towerBuzzer: 'off' },
         },
         {
           name: 'Off',
-          outputs: { redLight: 'on', yellowLight: 'off', greenLight: 'off', buzzer: 'off' },
+          outputs: { redLight: 'on', yellowLight: 'off', greenLight: 'off', primaryBuzzer: 'off', towerBuzzer: 'off' },
         },
       ],
       buttonBehavior: {
@@ -102,7 +103,7 @@ export default function SignalProfileForm({
       ...states,
       {
         name: newStateName,
-        outputs: { redLight: 'off', yellowLight: 'off', greenLight: 'off', buzzer: 'off' },
+        outputs: { redLight: 'off', yellowLight: 'off', greenLight: 'off', primaryBuzzer: 'off', towerBuzzer: 'off' },
       },
     ]);
   };

@@ -121,22 +121,45 @@ export default function StateEditor({
               </select>
             </div>
 
-            {/* Buzzer */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Buzzer
-              </label>
-              <select
-                value={state.outputs.buzzer}
-                onChange={(e) => handleFieldChange('buzzer', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              >
-                {buzzerModeOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+            {/* Buzzer Controls */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Primary Buzzer (GPIO46) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Primary Buzzer (GPIO46)
+                  <span className="text-xs text-gray-500 ml-1">Main board</span>
+                </label>
+                <select
+                  value={state.outputs.primaryBuzzer}
+                  onChange={(e) => handleFieldChange('primaryBuzzer', e.target.value as BuzzerMode)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {buzzerModeOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tower Buzzer (DO4) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tower Buzzer (DO4)
+                  <span className="text-xs text-gray-500 ml-1">Tower light</span>
+                </label>
+                <select
+                  value={state.outputs.towerBuzzer}
+                  onChange={(e) => handleFieldChange('towerBuzzer', e.target.value as BuzzerMode)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {buzzerModeOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
